@@ -1,0 +1,6 @@
+/* Ordnet die Statistik-Karten in einem Raster an */
+.stat-grid {
+  display: grid;
+    /* Drei Spalten erhalten jeweils einen gleich großen Anteil */
+  grid-template-columns: repeat(3, 1fr);
+}
