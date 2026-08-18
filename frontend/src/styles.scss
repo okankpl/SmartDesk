@@ -1,1 +1,26 @@
-/* You can add global styles to this file, and also import other style files */
+@use '@fontsource-variable/manrope';
+
+/* Globale Grundlage für Schrift und konsistente Größenberechnung */
+:root {
+	font-family: 'Manrope Variable', 'Segoe UI', sans-serif;
+	font-synthesis: none;
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+}
+
+/* Formularelemente übernehmen die Anwendungsschrift */
+body,
+button,
+input,
+select,
+textarea {
+	font: inherit;
+}

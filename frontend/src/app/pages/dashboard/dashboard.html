@@ -1,6 +1,30 @@
-<strong>{{ openTickets() }}</strong>
-<div class="stat-grid">
-  <article class="stat-card">Offene Tickets</article>
-  <article class="stat-card">Kritische Incidents</article>
-  <article class="stat-card">Heute gelöst</article>
-</div>
+<section class="dashboard" aria-labelledby="dashboard-title">
+  <!-- Überschrift der aktuellen Seite -->
+  <header class="page-header">
+    <p class="eyebrow">Übersicht</p>
+    <h1 id="dashboard-title">Dashboard</h1>
+  </header>
+
+  <!-- Kennzahlen werden aus dem Zustand in dashboard.ts erzeugt -->
+  <div class="stat-grid">
+    @for (statistic of statistics(); track statistic.label) {
+      <article class="stat-card">
+        <span>{{ statistic.label }}</span>
+        <strong>{{ statistic.value }}</strong>
+      </article>
+    }
+  </div>
+
+  <section class="ticket-section" aria-labelledby="ticket-section-title">
+    <div class="section-heading">
+      <p class="eyebrow">Arbeitsbereich</p>
+      <h2 id="ticket-section-title">Aktuelle Tickets</h2>
+    </div>
+
+    <div class="ticket-grid">
+      @for (ticket of tickets(); track ticket.title) {
+        <app-ticket-card [ticket]="ticket" />
+      }
+    </div>
+  </section>
+</section>

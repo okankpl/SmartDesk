@@ -1,13 +1,24 @@
-// Importiert die Werkzeuge für Komponenten und reaktive Daten
 import { Component, signal } from '@angular/core';
+import { Ticket, TicketCard } from './ticket-card/ticket-card';
 
 @Component({
-  selector: 'app-dashboard', // HTML-Name der Komponente
-  imports: [], // Weitere benötigte Komponenten und Direktiven
-  templateUrl: './dashboard.html', // Zugehöriges HTML-Template
-  styleUrl: './dashboard.scss' // Styles nur für diese Komponente
+  selector: 'app-dashboard',
+  imports: [TicketCard],
+  templateUrl: './dashboard.html',
+  styleUrl: './dashboard.scss'
 })
 export class Dashboard {
-  // Reaktiver Zustand mit dem Startwert 12
-  protected readonly openTickets = signal(12);
+  // Gemeinsamer Zustand für die Kennzahlen des Dashboards
+  protected readonly statistics = signal([
+    { label: 'Offene Tickets', value: 12 },
+    { label: 'Kritische Incidents', value: 2 },
+    { label: 'Heute gelöst', value: 8 },
+    { label: 'In Bearbeitung', value: 5 }
+  ]);
+
+  protected readonly tickets = signal<Ticket[]>([
+    { title: 'Login pruefen', status: 'open', priority: 1 },
+    { title: 'Drucker einrichten', status: 'closed', priority: 3 },
+    { title: 'Zugang anlegen', status: 'open', priority: 2 }
+  ]);
 }

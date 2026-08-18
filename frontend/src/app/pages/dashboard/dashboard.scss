@@ -1,6 +1,95 @@
-/* Ordnet die Statistik-Karten in einem Raster an */
+.dashboard {
+  display: grid;
+  gap: 2rem;
+}
+
+/* Kopfbereich der Dashboard-Seite */
+.page-header {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.page-header h1,
+.page-header p {
+  margin: 0;
+}
+
+.page-header h1 {
+  color: #17324d;
+  font-size: 2rem;
+}
+
+.eyebrow {
+  color: #587089;
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+/* Responsive Raster für die Dashboard-Kennzahlen */
 .stat-grid {
   display: grid;
-    /* Drei Spalten erhalten jeweils einen gleich großen Anteil */
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.stat-card {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  border: 1px solid #d9e1ea;
+  border-radius: 0.5rem;
+  background: #ffffff;
+  color: #587089;
+}
+
+.stat-card strong {
+  color: #17324d;
+  font-size: 2rem;
+}
+
+.ticket-section {
+  display: grid;
+  gap: 1rem;
+}
+
+.section-heading {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.section-heading h2,
+.section-heading p {
+  margin: 0;
+}
+
+.section-heading h2 {
+  color: #17324d;
+  font-size: 1.35rem;
+}
+
+.ticket-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+@media (max-width: 64rem) {
+  .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ticket-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 36rem) {
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ticket-grid {
+    grid-template-columns: 1fr;
+  }
 }

@@ -1,0 +1,100 @@
+/* Zweispaltiges Grundlayout aus Sidebar und Seiteninhalt */
+.app-shell {
+	display: grid;
+	grid-template-columns: 15rem minmax(0, 1fr);
+	min-height: 100vh;
+	background: #f5f7fb;
+}
+
+/* Dauerhafte Hauptnavigation auf der linken Seite */
+.sidebar {
+	display: flex;
+	flex-direction: column;
+	gap: 2.5rem;
+	padding: 1.5rem;
+	background: #17324d;
+	color: #ffffff;
+}
+
+.brand {
+	color: inherit;
+	font-size: 1.25rem;
+	font-weight: 700;
+	text-decoration: none;
+}
+
+/* Navigationslinks mit sichtbarem Aktivzustand */
+.navigation {
+	display: grid;
+	gap: 0.5rem;
+}
+
+.navigation a {
+	padding: 0.75rem 1rem;
+	border-radius: 0.375rem;
+	color: #d8e4ef;
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.navigation a:hover,
+.navigation a.active {
+	background: #2d5d7b;
+	color: #ffffff;
+}
+
+.main-area {
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr);
+	min-width: 0;
+}
+
+.topbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 1rem 2rem;
+	border-bottom: 1px solid #d9e1ea;
+	background: #ffffff;
+	color: #17324d;
+	font-weight: 600;
+}
+
+.user-avatar {
+	display: grid;
+	width: 2.5rem;
+	height: 2.5rem;
+	place-items: center;
+	border-radius: 50%;
+	background: #f0b429;
+	color: #17324d;
+	font-size: 0.875rem;
+	font-weight: 700;
+}
+
+/* Kopfzeile oberhalb des wechselnden Seiteninhalts */
+.content {
+	min-width: 0;
+	padding: 2rem;
+}
+
+/* Auf kleinen Bildschirmen steht die Navigation über dem Inhalt */
+@media (max-width: 48rem) {
+	.app-shell {
+		grid-template-columns: 1fr;
+	}
+
+	.sidebar {
+		gap: 1rem;
+		padding: 1rem;
+	}
+
+	.navigation {
+		display: flex;
+	}
+
+	.topbar,
+	.content {
+		padding-inline: 1rem;
+	}
+}
