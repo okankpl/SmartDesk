@@ -22,9 +22,9 @@
     </div>
 
     <div class="ticket-grid">
-      @for (ticket of tickets(); track ticket.title) {
-        <app-ticket-card [ticket]="ticket" />
-      }
+      @for (ticket of openTickets(); track ticket.title) {
+  <app-ticket-card [ticket]="ticket" />
+}
     </div>
   </section>
 </section>
