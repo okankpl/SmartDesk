@@ -68,10 +68,46 @@
   font-size: 1.35rem;
 }
 
+.section-heading__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.view-toggle {
+  padding: 0.625rem 0.875rem;
+  border: 1px solid #2d5d7b;
+  border-radius: 0.375rem;
+  background: #ffffff;
+  color: #2d5d7b;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.view-toggle:hover {
+  background: #eef4f8;
+}
+
 .ticket-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
+}
+
+.empty-state {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #587089;
+}
+
+@media (max-width: 36rem) {
+  .section-heading__row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 @media (max-width: 64rem) {

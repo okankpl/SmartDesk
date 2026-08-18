@@ -77,6 +77,21 @@ protected readonly tickets = signal<Ticket[]>([]);
 
 Im Template kann Angular auf Änderungen reagieren und die Anzeige aktualisieren.
 
+### `computed`
+
+`computed` erstellt einen Wert aus anderen Signals. Der Wert wird automatisch neu
+berechnet, wenn sich eine verwendete Quelle ändert:
+
+```ts
+const openTickets = computed(() =>
+	tickets().filter(ticket => ticket.status === 'open')
+);
+```
+
+Ein `computed`-Signal wird wie ein normales Signal mit `openTickets()` gelesen.
+Das Dashboard nutzt dieses Prinzip, um zwischen offenen und erledigten Tickets zu
+wechseln, ohne die Ticketdaten doppelt zu speichern.
+
 ### Angular-Template-Syntax
 
 Mit `@for` wird eine Liste dargestellt. `track` hilft Angular dabei, einzelne Einträge

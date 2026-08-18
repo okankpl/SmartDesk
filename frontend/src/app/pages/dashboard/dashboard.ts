@@ -32,4 +32,18 @@ export class Dashboard {
   protected readonly openTicketCount = computed(() =>
     this.openTickets().length,
   );
+
+  // Steuert, ob das Dashboard offene oder erledigte Tickets zeigt.
+  protected readonly showCompletedTickets = signal(false);
+
+  // Die sichtbare Liste wird aus dem aktuellen Ansichtsmodus abgeleitet.
+  protected readonly visibleTickets = computed(() =>
+    this.showCompletedTickets()
+      ? this.tickets().filter(ticket => ticket.status === 'closed')
+      : this.openTickets(),
+  );
+
+  protected toggleTicketView(): void {
+    this.showCompletedTickets.update(showCompleted => !showCompleted);
+  }
 }

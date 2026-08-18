@@ -18,13 +18,22 @@
   <section class="ticket-section" aria-labelledby="ticket-section-title">
     <div class="section-heading">
       <p class="eyebrow">Arbeitsbereich</p>
-      <h2 id="ticket-section-title">Aktuelle Tickets</h2>
+      <div class="section-heading__row">
+        <h2 id="ticket-section-title">
+          {{ showCompletedTickets() ? 'Erledigte Tickets' : 'Offene Tickets' }}
+        </h2>
+        <button type="button" class="view-toggle" (click)="toggleTicketView()">
+          {{ showCompletedTickets() ? 'Offene Tickets anzeigen' : 'Erledigte Tickets anzeigen' }}
+        </button>
+      </div>
     </div>
 
     <div class="ticket-grid">
-      @for (ticket of openTickets(); track ticket.title) {
-  <app-ticket-card [ticket]="ticket" />
-}
+      @for (ticket of visibleTickets(); track ticket.title) {
+        <app-ticket-card [ticket]="ticket" />
+      } @empty {
+        <p class="empty-state">Keine Tickets in dieser Ansicht.</p>
+      }
     </div>
   </section>
 </section>
