@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # "app.routers" ist unser eigener Ordner backend/app/routers/. "tickets" ist die Datei
 # tickets.py darin. Wir importieren das ganze Modul (nicht nur eine Funktion daraus),
 # damit wir unten "tickets.router" schreiben können.
-from app.routers import tickets
+from app.routers import tickets, users
 
 # FastAPI(...) ruft den Konstruktor der Klasse auf und erzeugt ein Objekt - "app" IST
 # jetzt unsere Anwendung. title="..." ist ein Keyword-Argument (Parameter wird über
@@ -33,6 +33,7 @@ app.add_middleware(
 # in diese App ein. tickets.router ist das APIRouter-Objekt, das dort erzeugt wurde -
 # der Punkt "." greift auf ein Attribut/Objekt innerhalb des Moduls zu.
 app.include_router(tickets.router)
+app.include_router(users.router)
 
 
 # @app.get("/health") ist ein Decorator (die Zeile mit @ direkt über einer Funktion).

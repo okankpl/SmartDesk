@@ -1,43 +1,56 @@
 from datetime import datetime
 
-# BaseModel ist die Basisklasse für alle Pydantic-Schemas (Validierung + Serialisierung).
-# ConfigDict ist ein Hilfstyp, um Einstellungen für so ein Schema zu setzen.
 from pydantic import BaseModel, ConfigDict
 
-from app.models.ticket import TicketStatus
+from app.models.ticket import TicketPriority, TicketStatus
 
 
-# TicketBase erbt von BaseModel - das macht es zu einem Pydantic-Schema, kein
-# SQLAlchemy-Modell (Unterschied zu Ticket in models/ticket.py!). Schemas beschreiben
-# JSON-Ein-/Ausgabe, Modelle beschreiben Datenbanktabellen.
 class TicketBase(BaseModel):
     """Felder, die sowohl beim Erstellen als auch beim Lesen eines Tickets vorkommen."""
 
     title: str
-    # "status: TicketStatus = TicketStatus.OPEN" - Type Hint UND Default-Wert kombiniert.
-    # Wird beim Erstellen kein status mitgeschickt, nimmt Pydantic automatisch OPEN.
+    description: str | None = None
     status: TicketStatus = TicketStatus.OPEN
-    priority: int = 1
+    priority: TicketPriority = TicketPriority.MEDIUM
 
 
-# "class TicketCreate(TicketBase):" mit leerem Klassenkörper (nur Docstring) - erbt
-# einfach ALLE Felder von TicketBase, ohne selbst neue hinzuzufügen. Der Grund, es
-# trotzdem als eigene Klasse zu haben: später (Phase 2+) kann TicketCreate wachsen,
-# ohne TicketBase/TicketRead zu verändern.
 class TicketCreate(TicketBase):
-    """Eingabedaten für POST /tickets. Aktuell identisch zu TicketBase."""
+    """Eingabedaten fuer POST /tickets.
+
+    requester_id wird hier noch vom Client mitgeschickt, weil es bis Phase 3
+    keinen eingeloggten Nutzer gibt, aus dem sich das automatisch ableiten
+    liesse. Sobald Auth existiert, kommt requester_id stattdessen aus dem
+    JWT-Token - dieses Feld faellt dann aus TicketCreate wieder raus.
+    """
+
+    requester_id: int
+
+
+class TicketUpdate(BaseModel):
+    """Eingabedaten fuer PATCH /tickets/{id}.
+
+    Bewusst OHNE status-Feld: Statuswechsel laufen ab Phase 4 ueber einen
+    eigenen, regelgeprueften Endpunkt (PATCH /tickets/{id}/status), nicht
+    ueber dieses generische "irgendwas aktualisieren".
+    Alle Felder sind optional (mit Default None) - PATCH aendert nur das,
+    was tatsaechlich mitgeschickt wurde.
+    """
+
+    title: str | None = None
+    description: str | None = None
+    priority: TicketPriority | None = None
+    assignee_id: int | None = None
 
 
 class TicketRead(TicketBase):
-    """Antwortformat für Ticket-Endpunkte, inklusive serverseitig erzeugter Felder."""
+    """Antwortformat fuer Ticket-Endpunkte, inklusive serverseitig erzeugter Felder."""
 
-    # from_attributes=True erlaubt es, dieses Schema direkt aus einem SQLAlchemy-Ticket-
-    # Objekt zu bauen (TicketRead.model_validate(ticket_objekt)), statt zwingend ein
-    # Dictionary übergeben zu müssen. FastAPI macht das intern automatisch.
     model_config = ConfigDict(from_attributes=True)
 
-    # Zusätzliche Felder, die NUR beim Lesen existieren (die DB erzeugt sie serverseitig,
-    # ein Client kann sie beim Erstellen nicht selbst mitgeben).
     id: int
+    requester_id: int
+    assignee_id: int | None
     created_at: datetime
     updated_at: datetime
+    resolved_at: datetime | None
+    closed_at: datetime | None
