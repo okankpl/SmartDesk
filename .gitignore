@@ -17,6 +17,13 @@ Thumbs.db
 # VS Code
 .vscode/
 
+# Python / Backend
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.pyc
+backend/.venv/
+
 # Environment
 .env
 .env.*
+!.env.example
