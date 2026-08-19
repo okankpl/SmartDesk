@@ -2,18 +2,22 @@
 
 /* Globale Grundlage für Schrift und konsistente Größenberechnung */
 :root {
-	font-family: 'Manrope Variable', 'Segoe UI', sans-serif;
-	font-synthesis: none;
+  font-family: 'Manrope Variable', 'Segoe UI', sans-serif;
+  font-synthesis: none;
 }
 
 *,
 *::before,
 *::after {
-	box-sizing: border-box;
+  box-sizing: border-box;
+}
+
+button {
+  cursor: pointer;
 }
 
 body {
-	margin: 0;
+  margin: 0;
 }
 
 /* Formularelemente übernehmen die Anwendungsschrift */
@@ -22,5 +26,5 @@ button,
 input,
 select,
 textarea {
-	font: inherit;
+  font: inherit;
 }

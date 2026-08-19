@@ -75,7 +75,14 @@
   gap: 1rem;
 }
 
-.view-toggle {
+/* Tab-Leiste zum Umschalten zwischen offenen, laufenden und erledigten Tickets */
+.view-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.view-tabs__button {
   padding: 0.625rem 0.875rem;
   border: 1px solid #2d5d7b;
   border-radius: 0.375rem;
@@ -87,8 +94,14 @@
   cursor: pointer;
 }
 
-.view-toggle:hover {
+.view-tabs__button:hover {
   background: #eef4f8;
+}
+
+/* Hebt den Tab hervor, der die aktuell sichtbare Ticketliste bestimmt */
+.view-tabs__button--active {
+  background: #2d5d7b;
+  color: #ffffff;
 }
 
 .ticket-grid {

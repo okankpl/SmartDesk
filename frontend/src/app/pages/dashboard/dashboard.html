@@ -19,12 +19,22 @@
     <div class="section-heading">
       <p class="eyebrow">Arbeitsbereich</p>
       <div class="section-heading__row">
-        <h2 id="ticket-section-title">
-          {{ showCompletedTickets() ? 'Erledigte Tickets' : 'Offene Tickets' }}
-        </h2>
-        <button type="button" class="view-toggle" (click)="toggleTicketView()">
-          {{ showCompletedTickets() ? 'Offene Tickets anzeigen' : 'Erledigte Tickets anzeigen' }}
-        </button>
+        <h2 id="ticket-section-title">{{ activeViewLabel() }}</h2>
+
+        <!-- Umschalter zwischen den drei Ticket-Ansichten -->
+        <div class="view-tabs" role="tablist" aria-label="Ticket-Ansicht wählen">
+          @for (tab of viewTabs; track tab.status) {
+            <button
+              type="button"
+              class="view-tabs__button"
+              [class.view-tabs__button--active]="activeView() === tab.status"
+              role="tab"
+              [attr.aria-selected]="activeView() === tab.status"
+              (click)="setActiveView(tab.status)">
+              {{ tab.label }}
+            </button>
+          }
+        </div>
       </div>
     </div>
 
@@ -37,3 +47,4 @@
     </div>
   </section>
 </section>
+

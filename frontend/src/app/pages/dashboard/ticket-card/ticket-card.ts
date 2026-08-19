@@ -2,7 +2,7 @@ import { Component, input } from '@angular/core';
 
 export interface Ticket {
   title: string;
-  status: 'open' | 'closed';
+  status: 'open' | 'closed'| 'in-progress';
   priority: number;
 }
 
@@ -13,5 +13,7 @@ export interface Ticket {
   styleUrl: './ticket-card.scss'
 })
 export class TicketCard {
+
+
   readonly ticket = input.required<Ticket>();
 }
