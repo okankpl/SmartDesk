@@ -29,9 +29,28 @@
   font-size: 0.875rem;
 }
 
+/* Schlichtes Pill-Badge für den Ticket-Status, Farbe je nach Status */
 .ticket-card__status {
-  color: #176b5d;
+  padding: 0.25rem 0.625rem;
+  border-radius: 999px;
   font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.ticket-card__status--open {
+  background: #e3edf6;
+  color: #2d5d7b;
+}
+
+.ticket-card__status--in-progress {
+  background: #fdf1d8;
+  color: #92660a;
+}
+
+.ticket-card__status--closed {
+  background: #dff3ee;
+  color: #176b5d;
 }

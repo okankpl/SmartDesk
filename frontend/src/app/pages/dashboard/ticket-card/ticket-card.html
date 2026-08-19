@@ -1,7 +1,9 @@
 <article class="ticket-card">
   <div class="ticket-card__header">
     <h3>{{ ticket().title }}</h3>
-    <span class="ticket-card__status">{{ ticket().status }}</span>
+    <span class="ticket-card__status ticket-card__status--{{ ticket().status }}">
+      {{ statusLabel() }}
+    </span>
   </div>
 
   <p>Prioritaet {{ ticket().priority }}</p>
