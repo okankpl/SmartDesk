@@ -3,28 +3,37 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.deps import get_current_user
 from app.models.ticket import Ticket
 from app.models.user import User
 from app.schemas.ticket import TicketCreate, TicketRead, TicketUpdate
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
 
+# Depends(get_current_user) an jedem Endpunkt: FastAPI ruft die Dependency vor
+# der jeweiligen Funktion auf, prueft den JWT und laedt den eingeloggten User.
+# Schlaegt das fehl (kein/ungueltiger Token), antwortet FastAPI automatisch mit
+# 401, bevor der Funktionskoerper ueberhaupt erreicht wird - Autorisierung
+# (WELCHE Rolle WAS darf) ist damit noch nicht abgedeckt, nur Authentifizierung
+# (WER ueberhaupt zugreifen darf). Siehe docs/architektur-und-konzepte.md.
+
 
 @router.get("", response_model=list[TicketRead])
-def list_tickets(db: Session = Depends(get_db)) -> list[Ticket]:
+def list_tickets(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[Ticket]:
     return list(db.execute(select(Ticket)).scalars().all())
 
 
 @router.post("", response_model=TicketRead, status_code=status.HTTP_201_CREATED)
-def create_ticket(payload: TicketCreate, db: Session = Depends(get_db)) -> Ticket:
-    # Ohne diese Pruefung wuerde ein ungueltiges requester_id nicht hier, sondern erst
-    # als roher Postgres-Fehler (ForeignKeyViolation) beim db.commit() auffliegen -
-    # unschoen und leakt DB-Interna nach aussen. Lieber vorher sauber pruefen und einen
-    # verstaendlichen 404 zurueckgeben.
-    if db.get(User, payload.requester_id) is None:
-        raise HTTPException(status_code=404, detail="requester_id verweist auf keinen existierenden User")
-
-    ticket = Ticket(**payload.model_dump())
+def create_ticket(
+    payload: TicketCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Ticket:
+    # requester_id kommt jetzt aus dem eingeloggten Nutzer, nicht mehr vom Client
+    # (siehe TicketCreate-Docstring) - ein separater Existenz-Check entfaellt damit,
+    # current_user existiert per Definition (sonst haette get_current_user schon
+    # mit 401 abgebrochen).
+    ticket = Ticket(**payload.model_dump(), requester_id=current_user.id)
     db.add(ticket)
     db.commit()
     db.refresh(ticket)
@@ -32,7 +41,7 @@ def create_ticket(payload: TicketCreate, db: Session = Depends(get_db)) -> Ticke
 
 
 @router.get("/{ticket_id}", response_model=TicketRead)
-def get_ticket(ticket_id: int, db: Session = Depends(get_db)) -> Ticket:
+def get_ticket(ticket_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> Ticket:
     ticket = db.get(Ticket, ticket_id)
     if ticket is None:
         raise HTTPException(status_code=404, detail="Ticket nicht gefunden")
@@ -40,7 +49,12 @@ def get_ticket(ticket_id: int, db: Session = Depends(get_db)) -> Ticket:
 
 
 @router.patch("/{ticket_id}", response_model=TicketRead)
-def update_ticket(ticket_id: int, payload: TicketUpdate, db: Session = Depends(get_db)) -> Ticket:
+def update_ticket(
+    ticket_id: int,
+    payload: TicketUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Ticket:
     ticket = db.get(Ticket, ticket_id)
     if ticket is None:
         raise HTTPException(status_code=404, detail="Ticket nicht gefunden")
@@ -65,7 +79,7 @@ def update_ticket(ticket_id: int, payload: TicketUpdate, db: Session = Depends(g
 
 
 @router.delete("/{ticket_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_ticket(ticket_id: int, db: Session = Depends(get_db)) -> None:
+def delete_ticket(ticket_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> None:
     ticket = db.get(Ticket, ticket_id)
     if ticket is None:
         raise HTTPException(status_code=404, detail="Ticket nicht gefunden")

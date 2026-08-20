@@ -17,13 +17,12 @@ class TicketBase(BaseModel):
 class TicketCreate(TicketBase):
     """Eingabedaten fuer POST /tickets.
 
-    requester_id wird hier noch vom Client mitgeschickt, weil es bis Phase 3
-    keinen eingeloggten Nutzer gibt, aus dem sich das automatisch ableiten
-    liesse. Sobald Auth existiert, kommt requester_id stattdessen aus dem
-    JWT-Token - dieses Feld faellt dann aus TicketCreate wieder raus.
+    Bewusst OHNE requester_id: seit die Ticket-Endpunkte einen JWT verlangen
+    (get_current_user), waere ein vom Client mitgeschicktes requester_id ein
+    Sicherheitsloch - der Client koennte damit Tickets im Namen eines anderen
+    Nutzers anlegen. Der Router setzt requester_id stattdessen serverseitig
+    aus dem eingeloggten Nutzer.
     """
-
-    requester_id: int
 
 
 class TicketUpdate(BaseModel):
