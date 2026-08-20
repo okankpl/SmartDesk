@@ -33,41 +33,28 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
 
 
-# --- Spickzettel: die zwei PyJWT-Funktionen, die du brauchst ---
-#
-# jwt.encode(payload: dict, key: str, algorithm: str) -> str
-#   Baut aus einem Dictionary einen signierten JWT-String.
-#
-# jwt.decode(token: str, key: str, algorithms: list[str]) -> dict
-#   Prueft Signatur UND Ablaufzeit ("exp") automatisch, gibt bei Erfolg das
-#   urspruengliche Payload-Dictionary zurueck. Wirft bei ungueltiger
-#   Signatur oder abgelaufenem Token eine jwt.PyJWTError-Ausnahme (die
-#   fangen wir spaeter in einer eigenen Dependency ab, noch nicht hier).
-
-
 def create_access_token(user_id: int, role: str) -> str:
-    """Erzeugt einen signierten JWT fuer einen eingeloggten Nutzer.
+    """Erzeugt einen signierten JWT für einen eingeloggten Nutzer.
 
     Wird beim Login aufgerufen, NACHDEM verify_password() das Passwort
-    bestaetigt hat.
+    bestätigt hat. "sub" und "exp" sind JWT-Standardfelder (subject/expiry),
+    die jwt.decode() automatisch auswertet.
     """
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
-        # "sub" (subject) ist ein JWT-Standardfeld fuer "wer ist das". Muss laut
-        # Spezifikation ein String sein, deshalb explizit umgewandelt.
-        "sub": str(user_id),
+        "sub": str(user_id),  # "sub" muss laut JWT-Standard ein String sein
         "role": role,
-        # "exp" ist ebenfalls ein Standardfeld - jwt.decode() prueft das automatisch
-        # und wirft jwt.ExpiredSignatureError, wenn der Zeitpunkt in der Vergangenheit liegt.
         "exp": expires_at,
     }
     return jwt.encode(payload, get_settings().secret_key, algorithm=ALGORITHM)
 
 
 def decode_access_token(token: str) -> dict:
-    """Prueft einen JWT und gibt sein Payload-Dictionary zurueck.
+    """Prüft einen JWT und gibt sein Payload-Dictionary zurück.
 
-    Loest jwt.PyJWTError (oder eine Unterklasse davon) aus, wenn der Token
-    ungueltig, gefaelscht oder abgelaufen ist.
+    Löst jwt.PyJWTError (oder eine Unterklasse davon, z.B. bei Ablauf
+    ExpiredSignatureError) aus, wenn der Token ungültig, gefälscht oder
+    abgelaufen ist. Wird von der noch fehlenden get_current_user-Dependency
+    abgefangen und in eine 401-Antwort übersetzt.
     """
     return jwt.decode(token, get_settings().secret_key, algorithms=[ALGORITHM])
