@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     # Wert wird als database_url (automatisch klein geschrieben erkannt) bereitgestellt."
     # Pydantic vergleicht Feldnamen standardmäßig case-insensitive mit Env-Variablen.
     database_url: str
+    secret_key: str
 
 
 # @lru_cache direkt über einer Funktion (ohne Klammern dahinter) heißt: "cache das
