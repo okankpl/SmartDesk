@@ -6,3 +6,6 @@ psycopg[binary]>=3.2
 pydantic-settings>=2.5
 bcrypt>=4.2
 pyjwt>=2.9
+
+# Nur zum Testen benoetigt, laeuft nie im echten Betrieb mit
+pytest>=8.0
