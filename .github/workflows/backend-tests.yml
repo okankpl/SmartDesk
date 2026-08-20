@@ -1,0 +1,39 @@
+name: Backend Tests
+
+# Loest diesen Workflow bei jedem Push und bei jedem Pull Request auf den
+# main-Branch aus. Laeuft auf GitHubs eigenen Servern, nicht bei dir lokal.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    # Alle "run"-Schritte starten automatisch im backend/-Ordner, damit wir
+    # nicht jedes Mal "cd backend &&" davorschreiben muessen.
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      # Unsere Tests brauchen keine echte Datenbankverbindung (nur die
+      # Settings-Klasse verlangt, dass die Variable ueberhaupt gesetzt ist).
+      # Kein echtes Geheimnis, nur ein Platzhalter fuer den CI-Lauf.
+      DATABASE_URL: postgresql+psycopg://test:test@localhost:5432/test
+      SECRET_KEY: ci-test-secret-key-not-for-production
+
+    steps:
+      # Laedt den Repo-Inhalt in die virtuelle Maschine, die diesen Job ausfuehrt.
+      - uses: actions/checkout@v4
+
+      - name: Python installieren
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Abhaengigkeiten installieren
+        run: pip install -r requirements.txt
+
+      - name: Tests ausfuehren
+        run: pytest -v
