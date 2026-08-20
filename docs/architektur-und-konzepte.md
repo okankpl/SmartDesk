@@ -124,12 +124,27 @@ Warum diese Trennung? Jede Schicht hat genau eine Verantwortung – der Router w
 
 ---
 
-## 6. Was noch fehlt (Kurz-Roadmap)
+## 6. Sicherheitsentscheidungen bei den Auth-Endpunkten
 
-1. `/auth/register`, `/auth/login`-Endpunkte (die vorhandenen `security.py`-Bausteine verdrahten)
-2. Ticket-Lifecycle-Regeln (wer darf welchen Status-Übergang machen)
+`POST /auth/register` und `POST /auth/login` (in `backend/app/routers/auth.py`) enthalten mehrere Design-Entscheidungen, die nicht offensichtlich sind, wenn man nur den Code liest:
+
+**Warum bekommt `RegisterRequest` kein `role`-Feld?** Würde der Client die Rolle selbst mitschicken dürfen, könnte sich jeder bei der Registrierung einfach `role: "admin"` setzen. Die Rolle wird deshalb serverseitig fest auf `EMPLOYEE` gesetzt – der Client hat darauf keinen Einfluss. (Wie ein Nutzer später zu `agent`/`admin` wird, ist bewusst noch offen – das wäre ein eigener, geschützter Endpunkt, den nur ein Admin aufrufen darf, kommt später.)
+
+**Warum `409 Conflict` bei doppelter Email, aber `401 Unauthorized` bei falschem Login?** HTTP-Statuscodes haben feste Bedeutungen: 409 heißt "die Anfrage selbst ist okay, aber sie widerspricht dem aktuellen Zustand der Ressource" (die Email existiert schon). 401 heißt "du bist nicht authentifiziert" – passt für falsche Zugangsdaten. Beide Fälle bewusst unterschiedliche Codes, weil sie fachlich unterschiedliche Dinge bedeuten (Verwendung falscher Statuscodes ist ein klassischer API-Design-Fehler).
+
+**Warum liefern "falsches Passwort" und "Email existiert nicht beim Login" exakt dieselbe Fehlermeldung?** Das ist eine bewusste Sicherheitsentscheidung gegen **User Enumeration**: Würde der Server bei einer unbekannten Email eine andere Meldung zeigen als bei einem falschen Passwort, könnte ein Angreifer systematisch durchprobieren, welche Email-Adressen überhaupt registriert sind – ein Datenschutzproblem für sich, selbst ohne dass ein Passwort geknackt wird.
+
+**Warum `OAuth2PasswordRequestForm` (Formular-Daten) statt JSON beim Login?** Das ist FastAPIs eingebauter, standardisierter Weg für Login-Endpunkte – dadurch funktioniert der "Authorize"-Button in der automatisch generierten Swagger-UI (`/docs`) ohne Zusatzaufwand.
+
+---
+
+## 7. Was noch fehlt (Kurz-Roadmap)
+
+1. ~~`/auth/register`, `/auth/login`-Endpunkte~~ – erledigt
+2. Ticket-Lifecycle-Regeln (wer darf welchen Status-Übergang machen) und die Ticket-Endpunkte damit gegen den JWT absichern (aktuell noch offen erreichbar)
 3. Frontend an die echte API anbinden (Mock-Daten raus)
 4. Kommentare/Zusatzfunktionen
-5. Tests, Politur, Deployment-Feinschliff
+5. Weitere Tests (Ticket-Endpunkte, Auth-Endpunkte), CI um eine Test-Datenbank erweitern
+6. Politur, Deployment-Feinschliff
 
 Ausführlicher Phasenplan: siehe die Commit-Historie (`git log`) – jeder Phasen-Commit beschreibt, was dazukam und warum.

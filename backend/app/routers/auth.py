@@ -15,34 +15,33 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> User:
     """Legt einen neuen Nutzer an. Rolle ist IMMER EMPLOYEE, siehe RegisterRequest."""
-    # TODO 1: pruefen, ob schon ein User mit payload.email existiert.
-    #   db.execute(select(User).where(User.email == payload.email)).scalar_one_or_none()
-    #   gibt entweder den User oder None zurueck.
-    #   Existiert er schon: raise HTTPException(status_code=409, detail="...")
+    existing_user = db.execute(select(User).where(User.email == payload.email)).scalar_one_or_none()
+    if existing_user is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email bereits registriert")
 
-    # TODO 2: payload.password mit hash_password() hashen
-
-    # TODO 3: User(...) erzeugen - email, hashed_password, full_name aus payload,
-    #   role=UserRole.EMPLOYEE FEST gesetzt (nicht aus payload!)
-
-    # TODO 4: db.add(...), db.commit(), db.refresh(...), User zurueckgeben
-    raise NotImplementedError
+    user = User(
+        email=payload.email,
+        hashed_password=hash_password(payload.password),
+        full_name=payload.full_name,
+        # Fest verdrahtet, NICHT aus payload - siehe Docstring/RegisterRequest.
+        role=UserRole.EMPLOYEE,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 @router.post("/login", response_model=TokenResponse)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)) -> TokenResponse:
     """Prueft Email (im 'username'-Feld) + Passwort, gibt bei Erfolg einen JWT zurueck."""
-    # TODO 1: User anhand form_data.username suchen (gleiche select()-Zeile wie oben,
-    #   nur mit form_data.username statt payload.email)
+    user = db.execute(select(User).where(User.email == form_data.username)).scalar_one_or_none()
 
-    # TODO 2: Falls kein User gefunden ODER verify_password(form_data.password,
-    #   user.hashed_password) False ergibt:
-    #   raise HTTPException(status_code=401, detail="Ungueltige Anmeldedaten")
-    #   Bewusst DIESELBE Fehlermeldung fuer beide Faelle - sonst koennte ein Angreifer
-    #   per unterschiedlicher Fehlermeldung rausfinden, welche Emails ueberhaupt
-    #   registriert sind.
+    # Bewusst DIESELBE Fehlermeldung fuer "User existiert nicht" UND "Passwort falsch" -
+    # sonst koennte ein Angreifer per unterschiedlicher Fehlermeldung rausfinden,
+    # welche Emails ueberhaupt registriert sind.
+    if user is None or not verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Ungueltige Anmeldedaten")
 
-    # TODO 3: token = create_access_token(user_id=user.id, role=user.role)
-
-    # TODO 4: TokenResponse(access_token=token) zurueckgeben
-    raise NotImplementedError
+    token = create_access_token(user_id=user.id, role=user.role)
+    return TokenResponse(access_token=token)

@@ -12,11 +12,11 @@ Warum welche Technologie gewählt wurde, wichtige Konzepte (Docker, Hashing, JWT
 ## Aktueller Stand
 
 - **Ticket-CRUD** – `GET/POST/PATCH/DELETE /tickets`, mit Prioritäts- und Status-Enums, Fremdschlüsseln zu `User`
-- **User-Modell** – Rollen `employee`/`agent`/`admin`, noch keine Registrierung/Login-Endpunkte
-- **Auth-Bausteine fertig, aber noch nicht verdrahtet** – Passwort-Hashing (bcrypt) und JWT-Erzeugung/-Prüfung (`backend/app/core/security.py`) sind fertig und getestet, aber es gibt noch keine `/auth/register`/`/auth/login`-Endpunkte, die sie benutzen
+- **Auth** – `POST /auth/register`, `POST /auth/login` (JWT via bcrypt-Passwort-Hashing), getestet
+- **Ticket-Endpunkte noch nicht geschützt** – jeder kann aktuell noch ohne Token auf `/tickets` zugreifen; Absicherung + Rollen-Regeln kommen mit dem Ticket-Lifecycle (nächster Schritt)
 - **Frontend und Backend sind noch nicht verbunden** – das Dashboard zeigt weiterhin Mock-Daten
 
-Nächste Schritte: Auth-Endpunkte, dann Ticket-Lifecycle-Regeln, dann Frontend-Anbindung.
+Nächste Schritte: Ticket-Lifecycle-Regeln (inkl. Endpunkte schützen), dann Frontend-Anbindung, dann Tests/CI erweitern.
 
 ## Backend lokal starten
 
