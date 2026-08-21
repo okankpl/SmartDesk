@@ -13,10 +13,11 @@ Warum welche Technologie gewählt wurde, wichtige Konzepte (Docker, Hashing, JWT
 
 - **Ticket-CRUD** – `GET/POST/PATCH/DELETE /tickets`, mit Prioritäts- und Status-Enums, Fremdschlüsseln zu `User`
 - **Auth** – `POST /auth/register`, `POST /auth/login` (JWT via bcrypt-Passwort-Hashing), getestet
-- **Ticket-Endpunkte sind jetzt geschützt** – `/tickets` verlangt einen gültigen JWT (`Authorization: Bearer <token>`); Rollen-Regeln (wer darf was) fehlen noch
+- **Ticket-Endpunkte sind geschützt** – `/tickets` verlangt einen gültigen JWT (`Authorization: Bearer <token>`)
+- **Ticket-Lifecycle mit Rollenregeln** – `PATCH /tickets/{id}/status` prüft Status-Übergänge gegen Rollen (z.B. nur `admin` darf final schließen), getestet
 - **Frontend und Backend sind noch nicht verbunden** – das Dashboard zeigt weiterhin Mock-Daten
 
-Nächste Schritte: rollenbasierte Autorisierung + Ticket-Lifecycle-Regeln, dann Frontend-Anbindung, dann Tests/CI erweitern.
+Nächste Schritte: Rollenprüfung auf die restlichen Ticket-Endpunkte ausweiten, dann Frontend-Anbindung, dann Tests/CI erweitern.
 
 ## Backend lokal starten
 

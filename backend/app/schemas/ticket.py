@@ -41,6 +41,17 @@ class TicketUpdate(BaseModel):
     assignee_id: int | None = None
 
 
+class TicketStatusUpdate(BaseModel):
+    """Eingabedaten fuer PATCH /tickets/{id}/status - der einzige erlaubte Weg, um
+    den Status eines Tickets zu aendern. Die eigentliche Pruefung, ob der
+    Uebergang erlaubt ist, passiert in app/services/ticket_lifecycle.py, nicht
+    hier im Schema - Pydantic prueft nur, dass ueberhaupt ein gueltiger
+    TicketStatus-Wert mitgeschickt wurde.
+    """
+
+    status: TicketStatus
+
+
 class TicketRead(TicketBase):
     """Antwortformat fuer Ticket-Endpunkte, inklusive serverseitig erzeugter Felder."""
 

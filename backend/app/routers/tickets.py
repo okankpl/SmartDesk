@@ -6,7 +6,8 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.ticket import Ticket
 from app.models.user import User
-from app.schemas.ticket import TicketCreate, TicketRead, TicketUpdate
+from app.schemas.ticket import TicketCreate, TicketRead, TicketStatusUpdate, TicketUpdate
+from app.services.ticket_lifecycle import apply_status_transition
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
 
@@ -72,6 +73,27 @@ def update_ticket(
         # "objekt.feldname = wert" - hier noetig, weil der Feldname erst zur Laufzeit
         # aus der Schleife kommt, nicht fest im Code steht.
         setattr(ticket, field, value)
+
+    db.commit()
+    db.refresh(ticket)
+    return ticket
+
+
+@router.patch("/{ticket_id}/status", response_model=TicketRead)
+def update_ticket_status(
+    ticket_id: int,
+    payload: TicketStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Ticket:
+    ticket = db.get(Ticket, ticket_id)
+    if ticket is None:
+        raise HTTPException(status_code=404, detail="Ticket nicht gefunden")
+
+    # Prueft die Uebergangs- und Rollenregeln und setzt bei Erfolg ticket.status
+    # (+ resolved_at/closed_at) direkt auf dem Objekt - wirft sonst eine
+    # passende HTTPException (409/403), siehe ticket_lifecycle.py.
+    apply_status_transition(ticket, payload.status, current_user)
 
     db.commit()
     db.refresh(ticket)

@@ -64,10 +64,10 @@ Funktionale Anforderungen beschreiben **konkretes Verhalten** des Systems ("das 
 | FA-2 | Ein registrierter Nutzer kann sich einloggen und erhält einen Zugangs-Token | ✅ `POST /auth/login` |
 | FA-3 | Ein Nutzer kann ein Ticket mit Titel, Beschreibung und Priorität erstellen | ✅ `POST /tickets` |
 | FA-4 | Tickets können gelesen, teilweise aktualisiert und gelöscht werden | ✅ `GET/PATCH/DELETE /tickets/{id}` |
-| FA-5 | Ein Ticket durchläuft einen festen Status-Lebenszyklus (offen → in Bearbeitung → gelöst → geschlossen) | 🔶 Datenmodell steht, Übergangsregeln offen (Phase 4) |
+| FA-5 | Ein Ticket durchläuft einen festen Status-Lebenszyklus (offen → in Bearbeitung → gelöst → geschlossen) | ✅ `PATCH /tickets/{id}/status`, Regeln in `app/services/ticket_lifecycle.py` |
 | FA-6 | Nur eingeloggte Nutzer dürfen auf Ticket-Endpunkte zugreifen | ✅ `get_current_user`-Dependency (`app/core/deps.py`), an jedem Ticket-Endpunkt |
-| FA-7 | Ein Agent kann sich ein Ticket zuweisen bzw. zugewiesen bekommen | 🔶 Datenfeld (`assignee_id`) existiert, kein eigener Endpunkt |
-| FA-8 | Nur ein Admin darf ein Ticket final schließen | ⏳ offen (Teil der Lebenszyklus-Regeln) |
+| FA-7 | Ein Agent kann sich ein Ticket zuweisen bzw. zugewiesen bekommen | 🔶 Datenfeld (`assignee_id`) über generisches `PATCH /tickets/{id}` setzbar, kein eigener "claim"-Endpunkt |
+| FA-8 | Nur ein Admin darf ein Ticket final schließen | ✅ in `ALLOWED_TRANSITIONS` (`RESOLVED → CLOSED` nur für `ADMIN`) |
 | FA-9 | Das Dashboard zeigt Kennzahlen (offene Tickets, kritische Incidents, heute gelöst) | 🔶 UI steht, nutzt noch Mock-Daten statt echter API |
 
 Diese Tabelle selbst ist übrigens ein kleines Beispiel für Requirements-Tracing: jede Zeile lässt sich auf einen Commit oder eine Datei zurückführen – das ist genau das Prinzip, das professionelle RE-Werkzeuge (z.B. Jira, Azure DevOps mit verlinkten Work Items) automatisieren.
@@ -165,7 +165,9 @@ Jede Ressource (z.B. Ticket) ist auf vier Dateien/Schichten aufgeteilt, die jede
 Router (app/routers/)      → nimmt HTTP-Anfragen entgegen, ruft die anderen Schichten auf
 Schema (app/schemas/)      → beschreibt, wie Ein-/Ausgabe-JSON aussehen darf (Validierung)
 Model (app/models/)        → beschreibt die Datenbank-Tabelle (SQLAlchemy)
-Service (app/services/)    → Geschäftslogik, die mehr ist als simples Lesen/Schreiben (kommt in Phase 4)
+Service (app/services/)    → Geschäftslogik, die mehr ist als simples Lesen/Schreiben
+                              (z.B. app/services/ticket_lifecycle.py: prüft Status-Übergänge
+                              gegen Rollenregeln, bevor der Router überhaupt committet)
 ```
 
 Warum diese Trennung? Jede Schicht hat genau eine Verantwortung – der Router weiß nichts über SQL, das Model weiß nichts über HTTP. Das macht jede Schicht einzeln verständlich und testbar, auch wenn das Projekt wächst.
@@ -180,7 +182,9 @@ Der Fachbegriff dafür ist **Schichtenarchitektur (Layered Architecture)** – e
 
 **Warum 4 Ticket-Status statt 3 (`open`/`in_progress`/`resolved`/`closed`)?** Mit nur 3 Status ist "schließen" eine einzelne Aktion ohne Kontrolle. Mit `resolved` als Zwischenschritt gibt es eine echte Freigabe-Regel: ein Agent markiert als gelöst, aber nur ein Admin (oder der Melder durch Ablehnen) entscheidet über den nächsten Schritt.
 
-**Warum die Status-Übergänge als einfaches Python-Dictionary statt einer State-Machine-Bibliothek?** Bei nur 4 Zuständen ist eine Bibliothek unnötige Komplexität – ein `dict[Status, set[Status]]` ist genauso mächtig, aber ohne zusätzliche Abhängigkeit komplett durchschaubar (kommt in Phase 4). Das ist ein bewusstes **YAGNI**-Prinzip ("You Aren't Gonna Need It") – nicht jede Modellierungsfrage braucht die "enterprise" Lösung.
+**Warum die Status-Übergänge als einfaches Python-Dictionary statt einer State-Machine-Bibliothek?** Bei nur 4 Zuständen ist eine Bibliothek unnötige Komplexität – `ALLOWED_TRANSITIONS` in [ticket_lifecycle.py](../backend/app/services/ticket_lifecycle.py) ist ein `dict[Status, dict[Status, set[Rolle]]]`, genauso mächtig wie eine State-Machine-Bibliothek, aber ohne zusätzliche Abhängigkeit komplett durchschaubar. Das ist ein bewusstes **YAGNI**-Prinzip ("You Aren't Gonna Need It") – nicht jede Modellierungsfrage braucht die "enterprise" Lösung.
+
+**Wer darf welchen Status-Übergang auslösen?** Umgesetzt in [apply_status_transition](../backend/app/services/ticket_lifecycle.py): `OPEN → IN_PROGRESS` und `IN_PROGRESS → RESOLVED` dürfen `AGENT`/`ADMIN` (ein Ticket claimen bzw. als gelöst markieren), `RESOLVED → CLOSED` nur `ADMIN` (FA-8), `RESOLVED → IN_PROGRESS` darf `EMPLOYEE` **nur beim eigenen** Ticket auslösen (Ablehnen der Lösung) oder `ADMIN` bei jedem. `CLOSED` ist ein Endzustand ohne Übergänge raus. Das ist eine **fachliche Entscheidung, keine rein technische** – wenn du andere Regeln willst (z.B. sollen Agents nur eigene zugewiesene Tickets bearbeiten dürfen), ist genau diese Tabelle die Stelle zum Anpassen.
 
 **Warum `requester_id` und `assignee_id` als zwei getrennte Felder?** Weil "wer hat's gemeldet" und "wer bearbeitet's gerade" unterschiedliche Dinge sind, die sich unabhängig voneinander ändern (ein Ticket kann den Bearbeiter wechseln, der Melder bleibt immer gleich).
 
@@ -261,14 +265,15 @@ Ehrlich zu benennen, was fehlt, ist selbst ein Qualitätsmerkmal. Hier die aktue
 
 | Lücke | Warum sie (noch) offen ist | Wie man sie in echt schließt |
 |---|---|---|
-| Keine Rollenprüfung (Autorisierung) auf Endpunkt-Ebene | Authentifizierung (`get_current_user`) steht seit Phase 4a, Rollenprüfung ist der direkt darauf aufbauende nächste Schritt | z.B. `require_role(UserRole.ADMIN)` als weitere Dependency, bevor ein Ticket final geschlossen werden darf |
+| Rollenprüfung existiert nur für Status-Übergänge, nicht für den Rest | `ALLOWED_TRANSITIONS` deckt FA-5/FA-8 ab; Erstellen/Bearbeiten/Löschen/Lesen von Tickets sind weiterhin für jede eingeloggte Rolle offen | z.B. `DELETE /tickets/{id}` auf `ADMIN` beschränken, `GET /tickets` für `EMPLOYEE` auf die eigenen Tickets filtern |
 | `RegisterRequest.email` prüft kein E-Mail-Format | Bewusst zurückgestellt, um Register/Login zuerst end-to-end zum Laufen zu bringen | Pydantics `EmailStr`-Typ statt `str` (braucht das zusätzliche Package `email-validator` in `requirements.txt`) |
 | `RegisterRequest.password` hat keine Mindestlänge/-stärke | s.o. | ein `Field(min_length=8)` oder ein eigener Pydantic-`validator` |
 | Kein Logout / kein Token-Widerruf | JWTs sind zustandslos per Design (siehe Abschnitt 3) – "Widerruf" widerspricht dem Grundprinzip | entweder kurze Ablaufzeiten + Refresh-Token-Flow, oder eine serverseitige Blockliste für widerrufene Tokens |
 | `GET /tickets`, `GET /users` liefern immer die komplette Liste | Für die aktuelle, kleine Testdatenmenge unkritisch | Pagination (`?limit=20&offset=0`), Standard bei jeder wachsenden REST-API |
 | CORS erlaubt fest nur `localhost:4200` | Passt für lokale Entwicklung | in Produktion über eine Umgebungsvariable konfigurierbar machen, nicht hart codieren |
 | Frontend zeigt noch Mock-Daten, ist nicht an die API angebunden | Backend mit Auth ist gerade erst fertig geworden | `HttpClient`-Service im Frontend, der `tickets`-Signal aus einem echten `GET /tickets`-Aufruf befüllt |
-| Keine Integrationstests (nur Unit-Tests für `security.py`) | Erster Testfokus lag bewusst auf der isoliertesten, am einfachsten testbaren Logik | FastAPIs `TestClient` + eine Test-Datenbank (z.B. SQLite in-memory oder ein Test-Postgres-Container in der CI) |
+| Noch keine echten HTTP-Integrationstests (nur reine Unit-Tests für `security.py`/`ticket_lifecycle.py`) | Bisheriger Testfokus lag bewusst auf isolierter, ohne DB testbarer Logik | FastAPIs `TestClient` + eine Test-Datenbank (z.B. SQLite in-memory oder ein Test-Postgres-Container in der CI) |
+| `requirements.txt` pinnt nur Untergrenzen (`fastapi>=0.115`), keine exakten Versionen | Beim Projektstart bewusst einfach gehalten | für reproduzierbare Installationen exakte Versionen pinnen (`==`) oder ein Lockfile-Tool wie `pip-compile`/`uv` einsetzen – ein frischer `pip install` kann sonst Monate später eine deutlich neuere, potenziell inkompatible Version ziehen (selbst erlebt: lokale Verifikation zog FastAPI 0.141 statt der Version von Projektstart) |
 
 ---
 
@@ -276,8 +281,8 @@ Ehrlich zu benennen, was fehlt, ist selbst ein Qualitätsmerkmal. Hier die aktue
 
 1. ~~`/auth/register`, `/auth/login`-Endpunkte~~ – erledigt
 2. ~~Ticket-Endpunkte gegen den JWT absichern (Authentifizierung)~~ – erledigt, `get_current_user`-Dependency
-3. Rollenbasierte Autorisierung + Ticket-Lifecycle-Regeln (wer darf welchen Status-Übergang machen)
-4. Frontend an die echte API anbinden (Mock-Daten raus)
+3. ~~Ticket-Lifecycle-Regeln + rollenbasierte Autorisierung für Status-Übergänge~~ – erledigt, `app/services/ticket_lifecycle.py` + `PATCH /tickets/{id}/status`
+4. Rollenprüfung auf die restlichen Ticket-Endpunkte ausweiten (wer darf löschen/bearbeiten/alle sehen), Frontend an die echte API anbinden
 5. Kommentare/Zusatzfunktionen
 6. Weitere Tests (Ticket-Endpunkte, Auth-Endpunkte), CI um eine Test-Datenbank erweitern
 7. Politur, Deployment-Feinschliff
