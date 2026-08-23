@@ -1,8 +1,11 @@
 <section class="dashboard" aria-labelledby="dashboard-title">
   <!-- Überschrift der aktuellen Seite -->
-  <header class="page-header">
-    <p class="eyebrow">Übersicht</p>
-    <h1 id="dashboard-title">Dashboard</h1>
+  <header class="page-header page-header--with-action">
+    <div>
+      <p class="eyebrow">Übersicht</p>
+      <h1 id="dashboard-title">Dashboard</h1>
+    </div>
+    <a routerLink="/tickets/new" class="new-ticket-button">+ Neues Ticket</a>
   </header>
 
   @if (ticketsError()) {

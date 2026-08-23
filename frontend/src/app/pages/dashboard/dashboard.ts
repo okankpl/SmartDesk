@@ -1,4 +1,5 @@
 import { Component, computed, inject, resource, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
 import { TicketsService } from '../../core/tickets/tickets';
@@ -23,7 +24,7 @@ function isToday(isoDate: string | null): boolean {
 
 @Component({
   selector: 'app-dashboard',
-  imports: [TicketCard],
+  imports: [TicketCard, RouterLink],
   templateUrl: './dashboard.html',
   styleUrls: ['./dashboard.scss'],
 })

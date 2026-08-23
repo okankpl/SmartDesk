@@ -403,7 +403,7 @@ Ehrlich zu benennen, was fehlt, ist selbst ein Qualitätsmerkmal. Hier die aktue
 | CORS/Cookie-Flags fest auf `localhost:4200` bzw. `secure=False` | Passt für lokale Entwicklung (`Secure`-Cookies würden ohne HTTPS gar nicht erst gesendet) | in Produktion über Umgebungsvariablen konfigurierbar machen, `secure=True` sobald HTTPS läuft |
 | Frontends `API_URL` ist im Code hart auf `http://localhost:8000` gesetzt | Es gibt noch keine echte Deployment-Umgebung | Angular-`environment.ts`-Dateien pro Umgebung (dev/prod), analog zur Backend-`.env` |
 | Keine Registrierungs-Seite im Frontend | Bewusst zurückgestellt, um den Login-Flow zuerst fertig zu bekommen | Formular analog zu `login.ts`, ruft `POST /auth/register` auf |
-| Dashboard ist nur lesend – kein Erstellen/Bearbeiten/Statuswechsel über die UI | Backend-Endpunkte dafür existieren bereits (`POST /tickets`, `PATCH /tickets/{id}/status`), UI-Anbindung fehlt noch | Formular fürs Erstellen, Buttons für erlaubte Statuswechsel (könnten sogar clientseitig aus `ALLOWED_TRANSITIONS`-Kenntnis ein-/ausgeblendet werden) |
+| Kein Bearbeiten/Statuswechsel über die UI (Erstellen jetzt möglich) | `PATCH /tickets/{id}/status` existiert bereits im Backend, UI-Anbindung fehlt noch | Buttons für erlaubte Statuswechsel je nach Rolle/aktuellem Status (könnten clientseitig aus derselben `ALLOWED_TRANSITIONS`-Kenntnis ein-/ausgeblendet werden wie im Backend) |
 | Noch keine echten HTTP-Integrationstests (nur reine Unit-Tests für `security.py`/`ticket_lifecycle.py`) | Bisheriger Testfokus lag bewusst auf isolierter, ohne DB testbarer Logik | FastAPIs `TestClient` + eine Test-Datenbank (z.B. SQLite in-memory oder ein Test-Postgres-Container in der CI) |
 | `requirements.txt` pinnt nur Untergrenzen (`fastapi>=0.115`), keine exakten Versionen | Beim Projektstart bewusst einfach gehalten | für reproduzierbare Installationen exakte Versionen pinnen (`==`) oder ein Lockfile-Tool wie `pip-compile`/`uv` einsetzen – ein frischer `pip install` kann sonst Monate später eine deutlich neuere, potenziell inkompatible Version ziehen (bei einer lokalen Testinstallation im August 2026 beobachtet: FastAPI 0.141 statt der beim Projektstart verwendeten Version) |
 
@@ -417,8 +417,9 @@ Ehrlich zu benennen, was fehlt, ist selbst ein Qualitätsmerkmal. Hier die aktue
 4. ~~Rollenprüfung auf die restlichen Ticket-Endpunkte ausweiten~~ – erledigt: `require_roles`-Dependency (`DELETE`/generisches `PATCH` nur `ADMIN`/`AGENT`) + Sichtbarkeits-Filterung (`EMPLOYEE` sieht nur eigene Tickets)
 5. ~~Frontend-Login an die echte API anbinden~~ – erledigt: HttpOnly-Cookie-Auth, `Auth`-Service, Login-Seite, Route-Guard
 6. ~~Dashboard an `GET /tickets` anbinden~~ – erledigt: `TicketsService` + `resource()`, 4 Status-Tabs, Kennzahlen live berechnet
-7. Ticket erstellen/bearbeiten/Status ändern über die UI, Registrierungs-Seite im Frontend
-8. Weitere Tests (HTTP-Integrationstests, Auth-Endpunkte), CI um eine Test-Datenbank erweitern
-9. Politur, Deployment-Feinschliff
+7. ~~Ticket erstellen über die UI~~ – erledigt: `/tickets/new`, `TicketsService.create()`
+8. Status ändern über die UI (Buttons für Claim/Lösen/Schließen/Ablehnen), Registrierungs-Seite im Frontend
+9. Weitere Tests (HTTP-Integrationstests, Auth-Endpunkte), CI um eine Test-Datenbank erweitern
+10. Politur, Deployment-Feinschliff
 
 Ausführlicher Phasenplan: siehe die Commit-Historie (`git log`) – jeder Phasen-Commit beschreibt, was dazukam und warum.

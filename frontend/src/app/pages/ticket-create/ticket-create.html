@@ -1,0 +1,38 @@
+<section class="ticket-create" aria-labelledby="ticket-create-title">
+  <header class="page-header">
+    <p class="eyebrow">Arbeitsbereich</p>
+    <h1 id="ticket-create-title">Neues Ticket</h1>
+  </header>
+
+  <form class="ticket-form" (submit)="submit($event)">
+    <label class="field">
+      <span>Titel</span>
+      <input type="text" [value]="title()" (input)="onTitleInput($event)" required maxlength="200" />
+    </label>
+
+    <label class="field">
+      <span>Beschreibung (optional)</span>
+      <textarea rows="4" [value]="description()" (input)="onDescriptionInput($event)"></textarea>
+    </label>
+
+    <label class="field">
+      <span>Priorität</span>
+      <select [value]="priority()" (change)="onPriorityChange($event)">
+        @for (option of priorityOptions; track option.value) {
+          <option [value]="option.value">{{ option.label }}</option>
+        }
+      </select>
+    </label>
+
+    @if (errorMessage()) {
+      <p class="error" role="alert">{{ errorMessage() }}</p>
+    }
+
+    <div class="form-actions">
+      <a routerLink="/dashboard" class="cancel-link">Abbrechen</a>
+      <button type="submit" [disabled]="isSubmitting()">
+        {{ isSubmitting() ? 'Wird angelegt…' : 'Ticket anlegen' }}
+      </button>
+    </div>
+  </form>
+</section>

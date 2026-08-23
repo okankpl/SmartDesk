@@ -3,6 +3,7 @@ import { authGuard } from './core/auth/auth-guard';
 import { MainLayout } from './layout/main-layout/main-layout';
 import { Dashboard } from './pages/dashboard/dashboard';
 import { Login } from './pages/login/login';
+import { TicketCreate } from './pages/ticket-create/ticket-create';
 
 export const routes: Routes = [
   {
@@ -27,6 +28,11 @@ export const routes: Routes = [
         path: 'dashboard',
         component: Dashboard,
         title: 'Dashboard | SmartDesk'
+      },
+      {
+        path: 'tickets/new',
+        component: TicketCreate,
+        title: 'Neues Ticket | SmartDesk'
       }
     ]
   },
