@@ -2,10 +2,14 @@ import { Injectable, computed, signal } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Observable, catchError, of, switchMap, tap } from 'rxjs';
 
+// Feldnamen bewusst 1:1 wie im JSON vom Backend (snake_case, siehe UserRead in
+// schemas/user.py) statt in TS-uebliches camelCase uebersetzt - es gibt aktuell
+// keine Mapping-Schicht dazwischen, ein Alias hier waere nur eine weitere
+// Fehlerquelle wie die, die genau das gerade verursacht hat.
 export interface CurrentUser {
   id: number;
   email: string;
-  fullName: string;
+  full_name: string;
   role: 'employee' | 'agent' | 'admin';
 }
 

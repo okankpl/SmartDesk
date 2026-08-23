@@ -24,7 +24,7 @@
       <span>IT Service Management</span>
       @if (currentUser(); as user) {
         <div class="user-info">
-          <div class="user-avatar" [attr.aria-label]="'Angemeldeter Benutzer ' + user.fullName">
+          <div class="user-avatar" [attr.aria-label]="'Angemeldeter Benutzer ' + user.full_name">
             {{ initials() }}
           </div>
           <button type="button" class="logout-button" (click)="logout()">Abmelden</button>

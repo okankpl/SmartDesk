@@ -35,7 +35,7 @@ export class MainLayout {
     if (!user) {
       return '';
     }
-    return user.fullName
+    return user.full_name
       .split(' ')
       .filter((part) => part.length > 0)
       .map((part) => part[0]!.toUpperCase())
