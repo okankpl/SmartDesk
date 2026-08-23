@@ -3,25 +3,33 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, require_roles
 from app.models.ticket import Ticket
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.ticket import TicketCreate, TicketRead, TicketStatusUpdate, TicketUpdate
 from app.services.ticket_lifecycle import apply_status_transition
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
 
 # Depends(get_current_user) an jedem Endpunkt: FastAPI ruft die Dependency vor
-# der jeweiligen Funktion auf, prueft den JWT und laedt den eingeloggten User.
-# Schlaegt das fehl (kein/ungueltiger Token), antwortet FastAPI automatisch mit
-# 401, bevor der Funktionskoerper ueberhaupt erreicht wird - Autorisierung
-# (WELCHE Rolle WAS darf) ist damit noch nicht abgedeckt, nur Authentifizierung
-# (WER ueberhaupt zugreifen darf). Siehe docs/architektur-und-konzepte.md.
+# der jeweiligen Funktion auf, prueft den JWT und laedt den eingeloggten User -
+# das ist Authentifizierung (WER darf ueberhaupt rein). Autorisierung (WELCHE
+# Rolle WAS darf) kommt zusaetzlich dazu: Depends(require_roles(...)) an den
+# Endpunkten, die nur bestimmte Rollen ausfuehren duerfen (siehe delete_ticket,
+# update_ticket), bzw. eine Sichtbarkeits-Filterung im Funktionskoerper selbst
+# dort, wo es nicht um "ja/nein", sondern um "welche Teilmenge" geht (siehe
+# list_tickets, get_ticket). Siehe docs/architektur-und-konzepte.md, Abschnitt 6/9.
 
 
 @router.get("", response_model=list[TicketRead])
 def list_tickets(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[Ticket]:
-    return list(db.execute(select(Ticket)).scalars().all())
+    query = select(Ticket)
+    # EMPLOYEE sieht nur selbst gemeldete Tickets (Datenschutz: fremde Anliegen
+    # sind nicht automatisch fuer alle sichtbar). AGENT/ADMIN sehen alles - sie
+    # muessen ja Tickets bearbeiten koennen, die sie nicht selbst gemeldet haben.
+    if current_user.role == UserRole.EMPLOYEE:
+        query = query.where(Ticket.requester_id == current_user.id)
+    return list(db.execute(query).scalars().all())
 
 
 @router.post("", response_model=TicketRead, status_code=status.HTTP_201_CREATED)
@@ -44,7 +52,12 @@ def create_ticket(
 @router.get("/{ticket_id}", response_model=TicketRead)
 def get_ticket(ticket_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> Ticket:
     ticket = db.get(Ticket, ticket_id)
-    if ticket is None:
+    # Dieselbe Sichtbarkeitsregel wie list_tickets, hier als "gehoert das
+    # Ticket ueberhaupt zu mir"-Check statt als Filter. Bewusst derselbe 404
+    # wie "existiert nicht" statt 403 "verboten": ein fremdes Ticket soll fuer
+    # einen Employee nicht mal als existent erkennbar sein (Object-Level
+    # Authorization / IDOR-Vermeidung, siehe Lernnotizen "Mass Assignment").
+    if ticket is None or (current_user.role == UserRole.EMPLOYEE and ticket.requester_id != current_user.id):
         raise HTTPException(status_code=404, detail="Ticket nicht gefunden")
     return ticket
 
@@ -54,7 +67,10 @@ def update_ticket(
     ticket_id: int,
     payload: TicketUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    # Nur AGENT/ADMIN duerfen Ticket-Inhalte per generischem PATCH aendern -
+    # EMPLOYEE greift nach dem Erstellen nur noch ueber den Statuswechsel-
+    # Endpunkt ein (Ablehnen einer Loesung, siehe ticket_lifecycle.py).
+    current_user: User = Depends(require_roles(UserRole.AGENT, UserRole.ADMIN)),
 ) -> Ticket:
     ticket = db.get(Ticket, ticket_id)
     if ticket is None:
@@ -101,7 +117,13 @@ def update_ticket_status(
 
 
 @router.delete("/{ticket_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_ticket(ticket_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> None:
+def delete_ticket(
+    ticket_id: int,
+    db: Session = Depends(get_db),
+    # Loeschen entfernt die Nachvollziehbarkeit komplett (anders als ein
+    # Status-Wechsel zu CLOSED) - deshalb bewusst nur ADMIN, nicht auch AGENT.
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+) -> None:
     ticket = db.get(Ticket, ticket_id)
     if ticket is None:
         raise HTTPException(status_code=404, detail="Ticket nicht gefunden")

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import decode_access_token
-from app.models.user import User
+from app.models.user import User, UserRole
 
 # tokenUrl zeigt nur auf die URL, die die Swagger-UI fuer ihr "Authorize"-Formular
 # anzeigt - den eigentlichen Token liest OAuth2PasswordBearer bei jeder Anfrage
@@ -46,3 +46,27 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise unauthorized
 
     return user
+
+
+def require_roles(*allowed_roles: UserRole):
+    """Dependency-Fabrik: baut eine Dependency, die zusaetzlich zu
+    get_current_user prueft, ob die Rolle des Nutzers in allowed_roles
+    enthalten ist - sonst 403.
+
+    "Fabrik" heisst hier: require_roles(...) selbst ist keine Dependency,
+    sondern eine Funktion, die eine passgenaue Dependency-Funktion ZURUECKGIBT.
+    Nutzung: current_user: User = Depends(require_roles(UserRole.ADMIN)).
+    Noetig, weil Depends() selbst keine Argumente an die Zielfunktion
+    durchreicht - der Trick ist, allowed_roles per Closure "einzubacken",
+    bevor FastAPI die zurueckgegebene Funktion als Dependency aufruft.
+    """
+
+    def check_role(current_user: User = Depends(get_current_user)) -> User:
+        if current_user.role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Für diese Aktion fehlt dir die Berechtigung",
+            )
+        return current_user
+
+    return check_role

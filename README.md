@@ -15,9 +15,10 @@ Warum welche Technologie gewählt wurde, wichtige Konzepte (Docker, Hashing, JWT
 - **Auth** – `POST /auth/register`, `POST /auth/login` (JWT via bcrypt-Passwort-Hashing), getestet
 - **Ticket-Endpunkte sind geschützt** – `/tickets` verlangt einen gültigen JWT (`Authorization: Bearer <token>`)
 - **Ticket-Lifecycle mit Rollenregeln** – `PATCH /tickets/{id}/status` prüft Status-Übergänge gegen Rollen (z.B. nur `admin` darf final schließen), getestet
+- **Rollenbasierte Autorisierung auf allen Ticket-Endpunkten** – `employee` sieht nur eigene Tickets, `PATCH`/`DELETE` sind `agent`/`admin` vorbehalten, getestet
 - **Frontend und Backend sind noch nicht verbunden** – das Dashboard zeigt weiterhin Mock-Daten
 
-Nächste Schritte: Rollenprüfung auf die restlichen Ticket-Endpunkte ausweiten, dann Frontend-Anbindung, dann Tests/CI erweitern.
+Nächste Schritte: Frontend an die echte API anbinden, dann Tests/CI erweitern.
 
 ## Backend lokal starten
 

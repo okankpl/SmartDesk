@@ -298,7 +298,11 @@ stateDiagram-v2
 2. `decode_access_token` (aus `security.py`) prüft Signatur und Ablaufzeit – schlägt das fehl (`jwt.PyJWTError`), gibt es sofort `401`.
 3. Die `sub`-Claim aus dem Token wird als User-ID benutzt, um den `User` zu laden – existiert er nicht mehr (z.B. gelöscht), ebenfalls `401`.
 
-**Wichtige Unterscheidung:** Das ist **Authentifizierung** (ist der Nutzer überhaupt eingeloggt?), noch keine vollständige **Autorisierung** auf allen Endpunkten (darf diese konkrete Rolle diese konkrete Aktion?) – für Status-Übergänge ist Autorisierung inzwischen umgesetzt (siehe Abschnitt 5), für die übrigen Ticket-Endpunkte (Erstellen, Bearbeiten, Löschen, Lesen) noch nicht (siehe [Abschnitt 9](#9-bewusste-einschränkungen--offene-punkte)).
+**Wichtige Unterscheidung:** Das ist **Authentifizierung** (ist der Nutzer überhaupt eingeloggt?), zusätzlich dazu **Autorisierung** (darf diese konkrete Rolle diese konkrete Aktion?) – umgesetzt über zwei verschiedene Mechanismen, je nach Frage:
+- **Ja/Nein-Berechtigung** (darf diese Rolle das überhaupt?) → `Depends(require_roles(...))` in `deps.py`, z.B. `DELETE /tickets/{id}` nur für `ADMIN`, `PATCH /tickets/{id}` nur für `AGENT`/`ADMIN`.
+- **Sichtbarkeits-/Objekt-Filterung** (welche Teilmenge darf diese Rolle sehen?) → Filterlogik direkt im Endpunkt, z.B. `GET /tickets` liefert `EMPLOYEE` nur die eigenen Tickets, `GET /tickets/{id}` gibt bei fremdem Ticket bewusst `404` statt `403` zurück (verhindert, dass sich die Existenz eines fremden Tickets überhaupt erkennen lässt – siehe **Object-Level Authorization** / IDOR-Vermeidung).
+
+Für Status-Übergänge läuft die Rollenprüfung weiterhin separat in `ticket_lifecycle.py` (siehe Abschnitt 5), weil sie vom *aktuellen Status* abhängt, nicht nur von der Rolle allein.
 
 Eine zweite Konsequenz derselben Änderung: `POST /tickets` nimmt `requester_id` nicht mehr vom Client entgegen (das wäre seit es einen eingeloggten Nutzer gibt ein Sicherheitsloch – jeder hätte Tickets im Namen anderer anlegen können), sondern setzt es serverseitig aus `current_user.id`.
 
@@ -351,11 +355,11 @@ Ehrlich zu benennen, was fehlt, ist selbst ein Qualitätsmerkmal. Hier die aktue
 
 | Lücke | Warum sie (noch) offen ist | Wie man sie in echt schließt |
 |---|---|---|
-| Rollenprüfung existiert nur für Status-Übergänge, nicht für den Rest | `ALLOWED_TRANSITIONS` deckt FA-5/FA-8 ab; Erstellen/Bearbeiten/Löschen/Lesen von Tickets sind weiterhin für jede eingeloggte Rolle offen | z.B. `DELETE /tickets/{id}` auf `ADMIN` beschränken, `GET /tickets` für `EMPLOYEE` auf die eigenen Tickets filtern |
+| `/users`-Endpunkte sind für jede eingeloggte Rolle offen | Ausdrücklich außerhalb des Ticket-Rollenkonzepts gehalten (Roadmap-Punkt betraf nur Ticket-Endpunkte) | z.B. `GET /users` auf `AGENT`/`ADMIN` beschränken (Employees brauchen kein komplettes Nutzerverzeichnis) |
 | `RegisterRequest.email` prüft kein E-Mail-Format | Bewusst zurückgestellt, um Register/Login zuerst end-to-end zum Laufen zu bringen | Pydantics `EmailStr`-Typ statt `str` (braucht das zusätzliche Package `email-validator` in `requirements.txt`) |
 | `RegisterRequest.password` hat keine Mindestlänge/-stärke | s.o. | ein `Field(min_length=8)` oder ein eigener Pydantic-`validator` |
 | Kein Logout / kein Token-Widerruf | JWTs sind zustandslos per Design (siehe Abschnitt 3) – "Widerruf" widerspricht dem Grundprinzip | entweder kurze Ablaufzeiten + Refresh-Token-Flow, oder eine serverseitige Blockliste für widerrufene Tokens |
-| `GET /tickets`, `GET /users` liefern immer die komplette Liste | Für die aktuelle, kleine Testdatenmenge unkritisch | Pagination (`?limit=20&offset=0`), Standard bei jeder wachsenden REST-API |
+| `GET /tickets`, `GET /users` liefern immer die komplette (bzw. rollen-gefilterte) Liste ohne Paginierung | Für die aktuelle, kleine Testdatenmenge unkritisch | Pagination (`?limit=20&offset=0`), Standard bei jeder wachsenden REST-API |
 | CORS erlaubt fest nur `localhost:4200` | Passt für lokale Entwicklung | in Produktion über eine Umgebungsvariable konfigurierbar machen, nicht hart codieren |
 | Frontend zeigt noch Mock-Daten, ist nicht an die API angebunden | Backend mit Auth ist gerade erst fertig geworden | `HttpClient`-Service im Frontend, der `tickets`-Signal aus einem echten `GET /tickets`-Aufruf befüllt |
 | Noch keine echten HTTP-Integrationstests (nur reine Unit-Tests für `security.py`/`ticket_lifecycle.py`) | Bisheriger Testfokus lag bewusst auf isolierter, ohne DB testbarer Logik | FastAPIs `TestClient` + eine Test-Datenbank (z.B. SQLite in-memory oder ein Test-Postgres-Container in der CI) |
@@ -368,9 +372,10 @@ Ehrlich zu benennen, was fehlt, ist selbst ein Qualitätsmerkmal. Hier die aktue
 1. ~~`/auth/register`, `/auth/login`-Endpunkte~~ – erledigt
 2. ~~Ticket-Endpunkte gegen den JWT absichern (Authentifizierung)~~ – erledigt, `get_current_user`-Dependency
 3. ~~Ticket-Lifecycle-Regeln + rollenbasierte Autorisierung für Status-Übergänge~~ – erledigt, `app/services/ticket_lifecycle.py` + `PATCH /tickets/{id}/status`
-4. Rollenprüfung auf die restlichen Ticket-Endpunkte ausweiten (wer darf löschen/bearbeiten/alle sehen), Frontend an die echte API anbinden
-5. Kommentare/Zusatzfunktionen
-6. Weitere Tests (Ticket-Endpunkte, Auth-Endpunkte), CI um eine Test-Datenbank erweitern
-7. Politur, Deployment-Feinschliff
+4. ~~Rollenprüfung auf die restlichen Ticket-Endpunkte ausweiten~~ – erledigt: `require_roles`-Dependency (`DELETE`/generisches `PATCH` nur `ADMIN`/`AGENT`) + Sichtbarkeits-Filterung (`EMPLOYEE` sieht nur eigene Tickets)
+5. Frontend an die echte API anbinden (Mock-Daten raus)
+6. Kommentare/Zusatzfunktionen
+7. Weitere Tests (HTTP-Integrationstests, Auth-Endpunkte), CI um eine Test-Datenbank erweitern
+8. Politur, Deployment-Feinschliff
 
 Ausführlicher Phasenplan: siehe die Commit-Historie (`git log`) – jeder Phasen-Commit beschreibt, was dazukam und warum.
