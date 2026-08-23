@@ -383,6 +383,8 @@ Der Vorteil: `TicketCard` lässt sich isoliert wiederverwenden und testen, ohne 
 
 **Session-Wiederherstellung über einen App-Initializer** – `provideAppInitializer(...)` in [app.config.ts](../frontend/src/app/app.config.ts) fragt beim Start der Anwendung einmalig `GET /auth/me` ab, bevor der Router irgendeine Route auflöst. Ohne das würde [authGuard](../frontend/src/app/core/auth/auth-guard.ts) bei einem Seiten-Reload kurzzeitig fälschlich "nicht eingeloggt" annehmen, weil das `currentUser`-Signal erst nach der (asynchronen) Antwort befüllt wäre.
 
+**API-Feldnamen 1:1 übernommen statt ins TypeScript-übliche camelCase übersetzt** – das [`CurrentUser`-Interface](../frontend/src/app/core/auth/auth.ts) verwendet `full_name`, nicht `fullName`, weil genau das im JSON steht, das `UserRead` zurückgibt (siehe `schemas/user.py`). Es gibt bewusst keine Mapping-Schicht, die zwischen den beiden Namenskonventionen übersetzt: TypeScript prüft die Struktur eines von `HttpClient` empfangenen JSON-Objekts zur Compile-Zeit nicht wirklich (der generische Typ `CurrentUser` ist reine Behauptung, keine Laufzeit-Validierung) – ein falsch benanntes Feld führt dann nicht zu einem Compile-Fehler, sondern zu `undefined` zur Laufzeit, oft an einer Stelle, die weit vom eigentlichen Fehler entfernt liegt und ohne hilfreiche Fehlermeldung fehlschlägt (siehe Roadmap/Git-Historie: genau das ist hier einmal passiert – `user.fullName` war `undefined`, `.split(' ')` darauf brach die Rendering-Runde ab). Die Konsequenz: Frontend-Typen exakt am tatsächlichen Wire-Format ausrichten statt an einer Stil-Konvention, solange keine echte Validierung (z.B. ein Schema-Check zur Laufzeit) dazwischenhängt.
+
 ---
 
 ## 9. Bewusste Einschränkungen & offene Punkte
