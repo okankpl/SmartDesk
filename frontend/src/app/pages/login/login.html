@@ -1,10 +1,21 @@
 <div class="login-page">
+  <!-- (submit) statt Angulars (ngSubmit): ngSubmit gehoert zum FormsModule, das
+       wir hier bewusst nicht einbinden (siehe login.ts) - das native
+       Browser-"submit"-Ereignis reicht, solange wir es per event.preventDefault()
+       in submit() selbst abfangen. -->
   <form class="login-card" (submit)="submit($event)">
     <p class="brand">SmartDesk</p>
     <h1>Anmelden</h1>
 
     <label class="field">
       <span>E-Mail</span>
+      <!-- [value]="..." ist "Property Binding": schreibt den Signal-Wert IN das
+           Input-Feld hinein (einseitig, von Komponente -> DOM).
+           (input)="..." ist "Event Binding": ruft bei jeder Nutzereingabe eine
+           Methode auf (einseitig, von DOM -> Komponente). Zusammen ergibt das
+           dasselbe wie Angulars [(ngModel)] (Two-Way-Binding), nur explizit in
+           zwei Richtungen aufgeschrieben statt in einer Kurzschreibweise - und
+           ohne FormsModule-Abhaengigkeit. -->
       <input type="email" [value]="email()" (input)="onEmailInput($event)" required autocomplete="email" />
     </label>
 
@@ -18,6 +29,10 @@
         autocomplete="current-password" />
     </label>
 
+    <!-- @if ist Angulars neuere Control-Flow-Syntax (seit Angular 17, siehe
+         Architektur-Doku Abschnitt 8) fuer bedingtes Rendern - ersetzt das
+         aeltere *ngIf. Der Block wird nur ins DOM eingefuegt, wenn
+         errorMessage() nicht null/leer ist. -->
     @if (errorMessage()) {
       <p class="error" role="alert">{{ errorMessage() }}</p>
     }

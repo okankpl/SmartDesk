@@ -5,9 +5,17 @@
       <p class="eyebrow">Übersicht</p>
       <h1 id="dashboard-title">Dashboard</h1>
     </div>
+    <!-- routerLink statt href: navigiert innerhalb der Angular-App (kein
+         kompletter Seiten-Neuladen), Angular faengt den Klick ab und wechselt
+         nur die Route. -->
     <a routerLink="/tickets/new" class="new-ticket-button">+ Neues Ticket</a>
   </header>
 
+  <!-- @if/@else if/@else ist Angulars Control-Flow-Syntax fuer eine
+       Mehrfach-Verzweigung (wie if/elif/else in Python) - hier drei sich
+       gegenseitig ausschliessende Zustaende: Fehler beim Laden, noch am
+       Laden, oder fertig geladen. Nur EIN Zweig wird jeweils ins DOM
+       eingefuegt, nicht alle drei gleichzeitig versteckt. -->
   @if (ticketsError()) {
     <!-- z.B. wenn die Session abgelaufen ist oder das Backend nicht erreichbar ist -->
     <p class="error-state" role="alert">
@@ -18,6 +26,13 @@
   } @else {
     <!-- Kennzahlen werden aus dem Zustand in dashboard.ts erzeugt -->
     <div class="stat-grid">
+      <!-- @for durchlaeuft ein Array und wiederholt den Block pro Eintrag -
+           Angulars Ersatz fuer *ngFor. "track statistic.label" sagt Angular,
+           anhand welches (moeglichst eindeutigen) Werts es beim naechsten
+           Neu-Rendern erkennt, "das ist derselbe Eintrag wie vorher, nur
+           evtl. mit neuem Wert" statt ihn komplett neu aus dem DOM zu bauen -
+           wichtig fuer Performance und um z.B. Fokus/Animationen nicht zu
+           verlieren. -->
       @for (statistic of statistics(); track statistic.label) {
         <article class="stat-card">
           <span>{{ statistic.label }}</span>
@@ -50,6 +65,9 @@
       </div>
 
       <div class="ticket-grid">
+        <!-- @for mit @empty: der @empty-Block erscheint automatisch, wenn das
+             Array LEER ist - Angular prueft das selbst, kein "if (list.length
+             === 0)" noetig. -->
         @for (ticket of visibleTickets(); track ticket.id) {
           <app-ticket-card [ticket]="ticket" />
         } @empty {

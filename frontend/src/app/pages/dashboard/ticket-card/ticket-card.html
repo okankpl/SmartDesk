@@ -5,6 +5,10 @@
   <button type="button" class="ticket-card__trigger" (click)="openDetails()">
     <div class="ticket-card__header">
       <h3>{{ ticket().title }}</h3>
+      <!-- Interpolation MIT Bindestrich-Klasse: "ticket-card__status--{{ ... }}"
+           haengt den aktuellen Status als Teil des Klassennamens an, z.B.
+           "ticket-card__status--open" - die passende Farbe kommt dann rein
+           per CSS (siehe ticket-card.scss), nicht per Angular-Logik. -->
       <span class="ticket-card__status ticket-card__status--{{ ticket().status }}">
         {{ statusLabel() }}
       </span>
@@ -16,6 +20,12 @@
   </button>
 </article>
 
+<!-- #detailDialog ist eine "Template-Referenzvariable" - markiert dieses
+     Element, damit ticket-card.ts per viewChild('detailDialog') darauf
+     zugreifen kann. <dialog> ist ein natives HTML-Element (kein
+     Angular-Erfindung); ohne showModal()/open-Attribut ist es unsichtbar,
+     auch wenn es im DOM steht - deshalb erscheint dieses Popup nicht einfach
+     automatisch beim Laden der Seite. -->
 <dialog #detailDialog class="ticket-detail" (click)="onBackdropClick($event)">
   <div class="ticket-detail__content">
     <header class="ticket-detail__header">
@@ -34,13 +44,29 @@
       </span>
     </div>
 
+    <!-- "||" (logisches Oder) als einfacher Fallback: ist description ein
+         leerer/falsy Wert (bei uns: null), wird stattdessen der rechte String
+         angezeigt. Reicht hier, weil ein Ticket-Titel selbst nie leer sein
+         kann (im Formular "required") - description ist das einzige Feld, das
+         wirklich fehlen darf. -->
     <p class="ticket-detail__description">
       {{ ticket().description || 'Keine Beschreibung vorhanden.' }}
     </p>
 
+    <!-- <dl>/<dt>/<dd> ist die semantisch passende HTML-Struktur für
+         Beschriftung-Wert-Paare ("Description List") - <dt> = Begriff (z.B.
+         "Erstellt"), <dd> = zugehöriger Wert. -->
     <dl class="ticket-detail__meta">
       <dt>Erstellt</dt>
+      <!-- "| date: 'medium'" ist Angulars date-Pipe: formatiert den rohen
+           ISO-Datumsstring lesbar, 'medium' ist ein vordefiniertes Format
+           (Datum + Uhrzeit). Die tatsaechliche Sprache des Ergebnisses (z.B.
+           deutsche statt englische Monatsnamen) haengt von der
+           LOCALE_ID-Konfiguration in app.config.ts ab, nicht vom Pipe selbst. -->
       <dd>{{ ticket().created_at | date: 'medium' }}</dd>
+      <!-- @if pro Zeile: resolved_at/closed_at sind optional (null, solange
+           das Ticket den jeweiligen Status noch nicht erreicht hat) - die
+           Zeile taucht im Popup nur auf, wenn es einen echten Wert gibt. -->
       @if (ticket().resolved_at) {
         <dt>Gelöst</dt>
         <dd>{{ ticket().resolved_at | date: 'medium' }}</dd>

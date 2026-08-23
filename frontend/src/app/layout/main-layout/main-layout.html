@@ -22,8 +22,19 @@
     <!-- Dauerhafte Kopfzeile -->
     <header class="topbar">
       <span>IT Service Management</span>
+      <!-- "@if (currentUser(); as user)" prueft nicht nur, ob currentUser()
+           einen Wert hat, sondern speichert ihn zusaetzlich unter dem
+           lokalen Namen "user" fuer den gesamten Block - spart, currentUser()
+           im Block mehrfach neu aufzurufen, UND TypeScript weiss innerhalb
+           des Blocks sicher "user ist hier nie null" (ausserhalb des @if
+           koennte es das sein). -->
       @if (currentUser(); as user) {
         <div class="user-info">
+          <!-- [attr.aria-label]="..." (Attribut-Binding mit "attr."-Praefix)
+               statt normalem [aria-label]="...": bei ARIA-Attributen braucht
+               es dieses Praefix, weil sie keine echten DOM-Properties von
+               HTMLElement sind (anders als z.B. [value] bei einem <input>),
+               sondern nur als HTML-Attribute existieren. -->
           <div class="user-avatar" [attr.aria-label]="'Angemeldeter Benutzer ' + user.full_name">
             {{ initials() }}
           </div>
@@ -34,6 +45,8 @@
 
     <!-- Der wechselnde Seiteninhalt -->
     <main class="content">
+      <!-- Hier setzt Angular je nach aktueller URL Dashboard oder
+           TicketCreate ein (siehe app.routes.ts, "children"). -->
       <router-outlet />
     </main>
   </div>

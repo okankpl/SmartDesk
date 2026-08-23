@@ -12,12 +12,24 @@
 
     <label class="field">
       <span>Beschreibung (optional)</span>
+      <!-- Kein "required" hier - die Beschreibung ist laut Backend-Schema
+           (TicketCreate) optional, siehe auch das description-Handling in
+           ticket-create.ts (leer -> null). -->
       <textarea rows="4" [value]="description()" (input)="onDescriptionInput($event)"></textarea>
     </label>
 
     <label class="field">
       <span>Priorität</span>
+      <!-- (change) statt (input) beim <select>: "change" feuert erst, wenn eine
+           Auswahl abgeschlossen ist (Dropdown geschlossen), nicht bei jedem
+           Zwischenschritt - bei einem <select> gibt es ohnehin keine
+           Zwischenschritte wie bei Freitext-Eingabe. -->
       <select [value]="priority()" (change)="onPriorityChange($event)">
+        <!-- @for durchlaeuft priorityOptions und erzeugt pro Eintrag eine
+             <option>. "track option.value" sagt Angular, woran es einzelne
+             Eintraege bei Aenderungen wiedererkennt (hier: am eindeutigen
+             value) - wichtig fuer effizientes Neu-Rendern, dieselbe Idee wie
+             "track ticket.id" im Dashboard. -->
         @for (option of priorityOptions; track option.value) {
           <option [value]="option.value">{{ option.label }}</option>
         }
