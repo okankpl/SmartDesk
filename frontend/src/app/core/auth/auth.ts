@@ -2,6 +2,8 @@ import { Injectable, computed, signal } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Observable, catchError, of, switchMap, tap } from 'rxjs';
 
+import { API_URL } from '../api-url';
+
 // Feldnamen bewusst 1:1 wie im JSON vom Backend (snake_case, siehe UserRead in
 // schemas/user.py) statt in TS-uebliches camelCase uebersetzt - es gibt aktuell
 // keine Mapping-Schicht dazwischen, ein Alias hier waere nur eine weitere
@@ -12,11 +14,6 @@ export interface CurrentUser {
   full_name: string;
   role: 'employee' | 'agent' | 'admin';
 }
-
-// TODO: sobald es eine echte Deployment-Umgebung gibt, aus der Umgebungskonfiguration
-// lesen statt hart zu codieren (siehe "Bewusste Einschraenkungen" in der Architektur-Doku,
-// dort steht dieselbe Vereinfachung schon fuer die CORS-Origin im Backend).
-const API_URL = 'http://localhost:8000';
 
 @Injectable({ providedIn: 'root' })
 export class Auth {

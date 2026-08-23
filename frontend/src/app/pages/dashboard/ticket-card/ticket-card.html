@@ -6,5 +6,7 @@
     </span>
   </div>
 
-  <p>Priorität {{ ticket().priority }}</p>
+  <span class="ticket-card__priority ticket-card__priority--{{ ticket().priority }}">
+    {{ priorityLabel() }}
+  </span>
 </article>

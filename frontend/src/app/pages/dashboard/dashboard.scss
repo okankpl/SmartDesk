@@ -116,6 +116,19 @@
   color: #587089;
 }
 
+.loading-state {
+  margin: 0;
+  color: #587089;
+}
+
+.error-state {
+  margin: 0;
+  padding: 0.875rem 1rem;
+  border-radius: 0.5rem;
+  background: #fbe7e7;
+  color: #a13636;
+}
+
 @media (max-width: 36rem) {
   .section-heading__row {
     align-items: flex-start;

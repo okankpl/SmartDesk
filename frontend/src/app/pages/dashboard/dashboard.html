@@ -5,46 +5,55 @@
     <h1 id="dashboard-title">Dashboard</h1>
   </header>
 
-  <!-- Kennzahlen werden aus dem Zustand in dashboard.ts erzeugt -->
-  <div class="stat-grid">
-    @for (statistic of statistics(); track statistic.label) {
-      <article class="stat-card">
-        <span>{{ statistic.label }}</span>
-        <strong>{{ statistic.value }}</strong>
-      </article>
-    }
-  </div>
-
-  <section class="ticket-section" aria-labelledby="ticket-section-title">
-    <div class="section-heading">
-      <p class="eyebrow">Arbeitsbereich</p>
-      <div class="section-heading__row">
-        <h2 id="ticket-section-title">{{ activeViewLabel() }}</h2>
-
-        <!-- Umschalter zwischen den drei Ticket-Ansichten -->
-        <div class="view-tabs" role="tablist" aria-label="Ticket-Ansicht wählen">
-          @for (tab of viewTabs; track tab.status) {
-            <button
-              type="button"
-              class="view-tabs__button"
-              [class.view-tabs__button--active]="activeView() === tab.status"
-              role="tab"
-              [attr.aria-selected]="activeView() === tab.status"
-              (click)="setActiveView(tab.status)">
-              {{ tab.label }}
-            </button>
-          }
-        </div>
-      </div>
-    </div>
-
-    <div class="ticket-grid">
-      @for (ticket of visibleTickets(); track ticket.title) {
-        <app-ticket-card [ticket]="ticket" />
-      } @empty {
-        <p class="empty-state">Keine Tickets in dieser Ansicht.</p>
+  @if (ticketsError()) {
+    <!-- z.B. wenn die Session abgelaufen ist oder das Backend nicht erreichbar ist -->
+    <p class="error-state" role="alert">
+      Tickets konnten nicht geladen werden. Bitte Seite neu laden oder erneut einloggen.
+    </p>
+  } @else if (isLoadingTickets()) {
+    <p class="loading-state">Tickets werden geladen…</p>
+  } @else {
+    <!-- Kennzahlen werden aus dem Zustand in dashboard.ts erzeugt -->
+    <div class="stat-grid">
+      @for (statistic of statistics(); track statistic.label) {
+        <article class="stat-card">
+          <span>{{ statistic.label }}</span>
+          <strong>{{ statistic.value }}</strong>
+        </article>
       }
     </div>
-  </section>
+
+    <section class="ticket-section" aria-labelledby="ticket-section-title">
+      <div class="section-heading">
+        <p class="eyebrow">Arbeitsbereich</p>
+        <div class="section-heading__row">
+          <h2 id="ticket-section-title">{{ activeViewLabel() }}</h2>
+
+          <!-- Umschalter zwischen den vier Ticket-Ansichten -->
+          <div class="view-tabs" role="tablist" aria-label="Ticket-Ansicht wählen">
+            @for (tab of viewTabs; track tab.status) {
+              <button
+                type="button"
+                class="view-tabs__button"
+                [class.view-tabs__button--active]="activeView() === tab.status"
+                role="tab"
+                [attr.aria-selected]="activeView() === tab.status"
+                (click)="setActiveView(tab.status)">
+                {{ tab.label }}
+              </button>
+            }
+          </div>
+        </div>
+      </div>
+
+      <div class="ticket-grid">
+        @for (ticket of visibleTickets(); track ticket.id) {
+          <app-ticket-card [ticket]="ticket" />
+        } @empty {
+          <p class="empty-state">Keine Tickets in dieser Ansicht.</p>
+        }
+      </div>
+    </section>
+  }
 </section>
 

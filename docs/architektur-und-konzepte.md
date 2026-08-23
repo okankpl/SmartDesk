@@ -68,7 +68,7 @@ Funktionale Anforderungen beschreiben **konkretes Verhalten** des Systems ("das 
 | FA-6 | Nur eingeloggte Nutzer dürfen auf Ticket-Endpunkte zugreifen | ✅ `get_current_user`-Dependency (`app/core/deps.py`), an jedem Ticket-Endpunkt |
 | FA-7 | Ein Agent kann sich ein Ticket zuweisen bzw. zugewiesen bekommen | 🔶 Datenfeld (`assignee_id`) über generisches `PATCH /tickets/{id}` setzbar, kein eigener "claim"-Endpunkt |
 | FA-8 | Nur ein Admin darf ein Ticket final schließen | ✅ in `ALLOWED_TRANSITIONS` (`RESOLVED → CLOSED` nur für `ADMIN`) |
-| FA-9 | Das Dashboard zeigt Kennzahlen (offene Tickets, kritische Incidents, heute gelöst) | 🔶 UI steht, nutzt noch Mock-Daten statt echter API |
+| FA-9 | Das Dashboard zeigt Kennzahlen (offene Tickets, kritische Incidents, heute gelöst) | ✅ live aus `GET /tickets` berechnet (`dashboard.ts`) |
 
 Diese Tabelle ist zugleich ein kleines Beispiel für Requirements-Tracing: jede Zeile lässt sich auf einen Commit oder eine Datei zurückführen – das ist genau das Prinzip, das professionelle RE-Werkzeuge (z.B. Jira, Azure DevOps mit verlinkten Work Items) automatisieren.
 
@@ -381,6 +381,8 @@ Der Vorteil: `TicketCard` lässt sich isoliert wiederverwenden und testen, ohne 
 
 **Zentraler HTTP-Interceptor statt Wiederholung pro Aufruf** – [credentialsInterceptor](../frontend/src/app/core/credentials-interceptor.ts) hängt `withCredentials: true` an jede ausgehende Anfrage, damit der Auth-Cookie mitgeschickt wird. Eine Angular-Dependency-Injection-Variante desselben DRY-Gedankens wie `Depends(get_db)` im Backend: die einzelnen HTTP-Aufrufe (`Auth.login`, spätere Ticket-Aufrufe) müssen sich um diesen Aspekt nicht mehr einzeln kümmern.
 
+**`resource()` statt manuellem Lade-/Fehler-Zustand** – [dashboard.ts](../frontend/src/app/pages/dashboard/dashboard.ts) lädt Tickets über Angulars `resource()`-API statt eines simplen `http.get(...).subscribe(...)`. Der Unterschied: `resource()` liefert Lade- und Fehlerzustand (`isLoading()`, `error()`) automatisch als Signals mit, die sonst von Hand als zusätzliche Signals nachgebaut werden müssten. Das Template kann so direkt zwischen "lädt gerade", "Fehler" und "fertig geladen" unterscheiden (siehe `dashboard.html`), ohne eigene Zustandsverwaltung dafür.
+
 **Session-Wiederherstellung über einen App-Initializer** – `provideAppInitializer(...)` in [app.config.ts](../frontend/src/app/app.config.ts) fragt beim Start der Anwendung einmalig `GET /auth/me` ab, bevor der Router irgendeine Route auflöst. Ohne das würde [authGuard](../frontend/src/app/core/auth/auth-guard.ts) bei einem Seiten-Reload kurzzeitig fälschlich "nicht eingeloggt" annehmen, weil das `currentUser`-Signal erst nach der (asynchronen) Antwort befüllt wäre.
 
 **API-Feldnamen 1:1 übernommen statt ins TypeScript-übliche camelCase übersetzt** – das [`CurrentUser`-Interface](../frontend/src/app/core/auth/auth.ts) verwendet `full_name`, nicht `fullName`, weil genau das im JSON steht, das `UserRead` zurückgibt (siehe `schemas/user.py`). Es gibt bewusst keine Mapping-Schicht, die zwischen den beiden Namenskonventionen übersetzt: TypeScript prüft die Struktur eines von `HttpClient` empfangenen JSON-Objekts zur Compile-Zeit nicht wirklich (der generische Typ `CurrentUser` ist reine Behauptung, keine Laufzeit-Validierung) – ein falsch benanntes Feld führt dann nicht zu einem Compile-Fehler, sondern zu `undefined` zur Laufzeit, oft an einer Stelle, die weit vom eigentlichen Fehler entfernt liegt und ohne hilfreiche Fehlermeldung fehlschlägt (siehe Roadmap/Git-Historie: genau das ist hier einmal passiert – `user.fullName` war `undefined`, `.split(' ')` darauf brach die Rendering-Runde ab). Die Konsequenz: Frontend-Typen exakt am tatsächlichen Wire-Format ausrichten statt an einer Stil-Konvention, solange keine echte Validierung (z.B. ein Schema-Check zur Laufzeit) dazwischenhängt.
@@ -400,8 +402,8 @@ Ehrlich zu benennen, was fehlt, ist selbst ein Qualitätsmerkmal. Hier die aktue
 | `GET /tickets`, `GET /users` liefern immer die komplette (bzw. rollen-gefilterte) Liste ohne Paginierung | Für die aktuelle, kleine Testdatenmenge unkritisch | Pagination (`?limit=20&offset=0`), Standard bei jeder wachsenden REST-API |
 | CORS/Cookie-Flags fest auf `localhost:4200` bzw. `secure=False` | Passt für lokale Entwicklung (`Secure`-Cookies würden ohne HTTPS gar nicht erst gesendet) | in Produktion über Umgebungsvariablen konfigurierbar machen, `secure=True` sobald HTTPS läuft |
 | Frontends `API_URL` ist im Code hart auf `http://localhost:8000` gesetzt | Es gibt noch keine echte Deployment-Umgebung | Angular-`environment.ts`-Dateien pro Umgebung (dev/prod), analog zur Backend-`.env` |
-| Dashboard zeigt noch Mock-Ticket-Daten, ist nicht an `GET /tickets` angebunden | Login-Flow (dieser Schritt) kam zuerst | `HttpClient`-Aufruf in `dashboard.ts`, der `tickets`-Signal aus der echten API befüllt (nächster Schritt) |
 | Keine Registrierungs-Seite im Frontend | Bewusst zurückgestellt, um den Login-Flow zuerst fertig zu bekommen | Formular analog zu `login.ts`, ruft `POST /auth/register` auf |
+| Dashboard ist nur lesend – kein Erstellen/Bearbeiten/Statuswechsel über die UI | Backend-Endpunkte dafür existieren bereits (`POST /tickets`, `PATCH /tickets/{id}/status`), UI-Anbindung fehlt noch | Formular fürs Erstellen, Buttons für erlaubte Statuswechsel (könnten sogar clientseitig aus `ALLOWED_TRANSITIONS`-Kenntnis ein-/ausgeblendet werden) |
 | Noch keine echten HTTP-Integrationstests (nur reine Unit-Tests für `security.py`/`ticket_lifecycle.py`) | Bisheriger Testfokus lag bewusst auf isolierter, ohne DB testbarer Logik | FastAPIs `TestClient` + eine Test-Datenbank (z.B. SQLite in-memory oder ein Test-Postgres-Container in der CI) |
 | `requirements.txt` pinnt nur Untergrenzen (`fastapi>=0.115`), keine exakten Versionen | Beim Projektstart bewusst einfach gehalten | für reproduzierbare Installationen exakte Versionen pinnen (`==`) oder ein Lockfile-Tool wie `pip-compile`/`uv` einsetzen – ein frischer `pip install` kann sonst Monate später eine deutlich neuere, potenziell inkompatible Version ziehen (bei einer lokalen Testinstallation im August 2026 beobachtet: FastAPI 0.141 statt der beim Projektstart verwendeten Version) |
 
@@ -414,8 +416,8 @@ Ehrlich zu benennen, was fehlt, ist selbst ein Qualitätsmerkmal. Hier die aktue
 3. ~~Ticket-Lifecycle-Regeln + rollenbasierte Autorisierung für Status-Übergänge~~ – erledigt, `app/services/ticket_lifecycle.py` + `PATCH /tickets/{id}/status`
 4. ~~Rollenprüfung auf die restlichen Ticket-Endpunkte ausweiten~~ – erledigt: `require_roles`-Dependency (`DELETE`/generisches `PATCH` nur `ADMIN`/`AGENT`) + Sichtbarkeits-Filterung (`EMPLOYEE` sieht nur eigene Tickets)
 5. ~~Frontend-Login an die echte API anbinden~~ – erledigt: HttpOnly-Cookie-Auth, `Auth`-Service, Login-Seite, Route-Guard
-6. Dashboard an `GET /tickets` anbinden (Mock-Ticket-Daten raus)
-7. Registrierungs-Seite im Frontend, Kommentare/Zusatzfunktionen
+6. ~~Dashboard an `GET /tickets` anbinden~~ – erledigt: `TicketsService` + `resource()`, 4 Status-Tabs, Kennzahlen live berechnet
+7. Ticket erstellen/bearbeiten/Status ändern über die UI, Registrierungs-Seite im Frontend
 8. Weitere Tests (HTTP-Integrationstests, Auth-Endpunkte), CI um eine Test-Datenbank erweitern
 9. Politur, Deployment-Feinschliff
 

@@ -29,8 +29,11 @@
   font-size: 0.875rem;
 }
 
-/* Schlichtes Pill-Badge für den Ticket-Status, Farbe je nach Status */
-.ticket-card__status {
+/* Schlichtes Pill-Badge, Basis für Status- und Prioritäts-Badge */
+.ticket-card__status,
+.ticket-card__priority {
+  display: inline-block;
+  width: fit-content;
   padding: 0.25rem 0.625rem;
   border-radius: 999px;
   font-size: 0.75rem;
@@ -45,12 +48,37 @@
   color: #2d5d7b;
 }
 
-.ticket-card__status--in-progress {
+.ticket-card__status--in_progress {
   background: #fdf1d8;
   color: #92660a;
+}
+
+.ticket-card__status--resolved {
+  background: #ede4f7;
+  color: #6b3fa0;
 }
 
 .ticket-card__status--closed {
   background: #dff3ee;
   color: #176b5d;
+}
+
+.ticket-card__priority--low {
+  background: #eef1f4;
+  color: #5b6b79;
+}
+
+.ticket-card__priority--medium {
+  background: #e3edf6;
+  color: #2d5d7b;
+}
+
+.ticket-card__priority--high {
+  background: #fdf1d8;
+  color: #92660a;
+}
+
+.ticket-card__priority--critical {
+  background: #fbe7e7;
+  color: #a13636;
 }
