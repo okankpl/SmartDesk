@@ -174,9 +174,83 @@ Grund für diese Trennung: jede Schicht hat genau eine Verantwortung – der Rou
 
 Der Fachbegriff dafür ist **Schichtenarchitektur (Layered Architecture)** – eines der ältesten und am weitesten verbreiteten Architekturmuster überhaupt (auch als "3-Tier-Architektur" bekannt). Dieser Abschnitt entspricht im arc42-Sinn im Grunde der "Bausteinsicht" der Architektur.
 
+Das folgende Sequenzdiagramm zeigt das Zusammenspiel der Schichten und Schnittstellen am Beispiel von `POST /tickets`: der Router ruft zunächst die Authentifizierungs-Dependency auf (Abschnitt 6), erst danach die eigentliche Erstell-Logik.
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant R as Router (tickets.py)
+    participant D as get_current_user (deps.py)
+    participant Sec as security.py
+    participant DB as Datenbank
+
+    C->>R: POST /tickets<br/>Authorization: Bearer &lt;token&gt;
+    R->>D: Depends(get_current_user)
+    D->>Sec: decode_access_token(token)
+    Sec-->>D: Payload {sub, role, exp}
+    D->>DB: db.get(User, sub)
+    DB-->>D: User
+    D-->>R: current_user
+    R->>DB: Ticket(..., requester_id=current_user.id)<br/>db.commit()
+    DB-->>R: gespeichertes Ticket
+    R-->>C: 201 Created + Ticket (JSON)
+```
+
 ---
 
 ## 5. Wichtige Datenmodell-Entscheidungen
+
+Das folgende Klassendiagramm zeigt die beiden zentralen Entitäten und ihre Beziehung zueinander. `requester_id` und `assignee_id` sind beides Fremdschlüssel auf `User`, aber mit unterschiedlicher Multiplizität – jedes Ticket hat genau einen Melder, aber optional (0..1) einen Bearbeiter:
+
+```mermaid
+classDiagram
+    class User {
+        +int id
+        +str email
+        +str hashed_password
+        +str full_name
+        +UserRole role
+        +datetime created_at
+    }
+    class Ticket {
+        +int id
+        +str title
+        +str description
+        +TicketStatus status
+        +TicketPriority priority
+        +int requester_id
+        +int assignee_id
+        +datetime created_at
+        +datetime resolved_at
+        +datetime closed_at
+    }
+    class UserRole {
+        <<enumeration>>
+        EMPLOYEE
+        AGENT
+        ADMIN
+    }
+    class TicketStatus {
+        <<enumeration>>
+        OPEN
+        IN_PROGRESS
+        RESOLVED
+        CLOSED
+    }
+    class TicketPriority {
+        <<enumeration>>
+        LOW
+        MEDIUM
+        HIGH
+        CRITICAL
+    }
+
+    Ticket "0..*" --> "1" User : requester_id
+    Ticket "0..*" --> "0..1" User : assignee_id
+    User --> UserRole
+    Ticket --> TicketStatus
+    Ticket --> TicketPriority
+```
 
 **Warum drei Rollen (`employee`/`agent`/`admin`) statt z.B. nur "Nutzer"?** Weil ein echtes ITSM-Tool (wie Jira Service Management) genau diese Trennung braucht: Melder ≠ Bearbeiter ≠ Administrator. Das macht die spätere Berechtigungslogik (wer darf ein Ticket schließen?) überhaupt erst sinnvoll.
 
@@ -185,6 +259,18 @@ Der Fachbegriff dafür ist **Schichtenarchitektur (Layered Architecture)** – e
 **Warum die Status-Übergänge als einfaches Python-Dictionary statt einer State-Machine-Bibliothek?** Bei nur 4 Zuständen ist eine Bibliothek unnötige Komplexität – `ALLOWED_TRANSITIONS` in [ticket_lifecycle.py](../backend/app/services/ticket_lifecycle.py) ist ein `dict[Status, dict[Status, set[Rolle]]]`, genauso mächtig wie eine State-Machine-Bibliothek, aber ohne zusätzliche Abhängigkeit komplett durchschaubar. Das ist ein bewusstes **YAGNI**-Prinzip ("You Aren't Gonna Need It") – nicht jede Modellierungsfrage braucht die "enterprise" Lösung.
 
 **Wer darf welchen Status-Übergang auslösen?** Umgesetzt in [apply_status_transition](../backend/app/services/ticket_lifecycle.py): `OPEN → IN_PROGRESS` und `IN_PROGRESS → RESOLVED` dürfen `AGENT`/`ADMIN` (ein Ticket claimen bzw. als gelöst markieren), `RESOLVED → CLOSED` nur `ADMIN` (FA-8), `RESOLVED → IN_PROGRESS` darf `EMPLOYEE` **nur beim eigenen** Ticket auslösen (Ablehnen der Lösung) oder `ADMIN` bei jedem. `CLOSED` ist ein Endzustand ohne Übergänge raus. Das ist eine **fachliche Entscheidung, keine rein technische** – bei abweichenden Anforderungen (z.B. sollen Agents nur eigene zugewiesene Tickets bearbeiten dürfen) ist genau diese Tabelle die Stelle zum Anpassen.
+
+Als Zustandsdiagramm (UML State Machine) entspricht `ALLOWED_TRANSITIONS` genau folgendem Bild:
+
+```mermaid
+stateDiagram-v2
+    [*] --> OPEN : Ticket erstellt
+    OPEN --> IN_PROGRESS : Agent/Admin claimt
+    IN_PROGRESS --> RESOLVED : Agent/Admin markiert gelöst
+    RESOLVED --> CLOSED : nur Admin schließt final
+    RESOLVED --> IN_PROGRESS : Melder lehnt ab (nur eigenes Ticket) / Admin
+    CLOSED --> [*]
+```
 
 **Warum `requester_id` und `assignee_id` als zwei getrennte Felder?** Weil "wer hat's gemeldet" und "wer bearbeitet's gerade" unterschiedliche Dinge sind, die sich unabhängig voneinander ändern (ein Ticket kann den Bearbeiter wechseln, der Melder bleibt immer gleich).
 
