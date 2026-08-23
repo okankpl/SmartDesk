@@ -1,12 +1,54 @@
 <article class="ticket-card">
-  <div class="ticket-card__header">
-    <h3>{{ ticket().title }}</h3>
-    <span class="ticket-card__status ticket-card__status--{{ ticket().status }}">
-      {{ statusLabel() }}
-    </span>
-  </div>
+  <!-- Ganze Karte als Button: klickbar, per Tastatur fokussierbar/aktivierbar
+       (Enter/Leertaste) ohne eigene Tastatur-Logik - anders als bei einem
+       <div (click)="..."> mit nachgebauten ARIA-Attributen. -->
+  <button type="button" class="ticket-card__trigger" (click)="openDetails()">
+    <div class="ticket-card__header">
+      <h3>{{ ticket().title }}</h3>
+      <span class="ticket-card__status ticket-card__status--{{ ticket().status }}">
+        {{ statusLabel() }}
+      </span>
+    </div>
 
-  <span class="ticket-card__priority ticket-card__priority--{{ ticket().priority }}">
-    {{ priorityLabel() }}
-  </span>
+    <span class="ticket-card__priority ticket-card__priority--{{ ticket().priority }}">
+      {{ priorityLabel() }}
+    </span>
+  </button>
 </article>
+
+<dialog #detailDialog class="ticket-detail" (click)="onBackdropClick($event)">
+  <div class="ticket-detail__content">
+    <header class="ticket-detail__header">
+      <h2>{{ ticket().title }}</h2>
+      <button type="button" class="ticket-detail__close" (click)="closeDetails()" aria-label="Schließen">
+        ✕
+      </button>
+    </header>
+
+    <div class="ticket-detail__badges">
+      <span class="ticket-card__status ticket-card__status--{{ ticket().status }}">
+        {{ statusLabel() }}
+      </span>
+      <span class="ticket-card__priority ticket-card__priority--{{ ticket().priority }}">
+        {{ priorityLabel() }}
+      </span>
+    </div>
+
+    <p class="ticket-detail__description">
+      {{ ticket().description || 'Keine Beschreibung vorhanden.' }}
+    </p>
+
+    <dl class="ticket-detail__meta">
+      <dt>Erstellt</dt>
+      <dd>{{ ticket().created_at | date: 'medium' }}</dd>
+      @if (ticket().resolved_at) {
+        <dt>Gelöst</dt>
+        <dd>{{ ticket().resolved_at | date: 'medium' }}</dd>
+      }
+      @if (ticket().closed_at) {
+        <dt>Geschlossen</dt>
+        <dd>{{ ticket().closed_at | date: 'medium' }}</dd>
+      }
+    </dl>
+  </div>
+</dialog>

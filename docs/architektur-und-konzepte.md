@@ -377,6 +377,8 @@ Der Vorteil: `TicketCard` lässt sich isoliert wiederverwenden und testen, ohne 
 
 **Neue `@for`/`@empty`-Control-Flow-Syntax** statt des älteren `*ngFor` – seit Angular 17 die empfohlene, kompiler-geprüfte Syntax für Schleifen/bedingte Anzeige in Templates (sichtbar in `dashboard.html`), u.a. mit eingebautem `@empty`-Block für den Leerzustand ("Keine Tickets in dieser Ansicht.").
 
+**Natives `<dialog>` statt selbstgebautem Modal** – das Ticket-Detail-Popup ([ticket-card.ts](../frontend/src/app/pages/dashboard/ticket-card/ticket-card.ts)) nutzt das HTML-Element `<dialog>` mit `showModal()`, statt ein eigenes Overlay zu bauen. Der Browser übernimmt dabei drei Dinge, die man bei einer selbstgebauten Lösung sonst selbst programmieren müsste: Fokus-Einfang (Tab bleibt innerhalb des Dialogs), Schließen per Escape-Taste, und den abgedunkelten Hintergrund (`::backdrop`). Nur das Schließen per Klick auf den Hintergrund ist kein eingebautes Verhalten und wird per Klick-Handler nachgebaut (prüft, ob das Klick-Ziel das `<dialog>`-Element selbst ist, nicht sein Inhalt).
+
 **Barrierefreiheit (Accessibility) von Anfang an mitgedacht** – `aria-label`, `role="tablist"`/`role="tab"`, `aria-selected` sind bereits im Code (`dashboard.html`, `main-layout.html`). Das ist keine nachträgliche Fleißaufgabe, sondern ein Qualitätsmerkmal, das in professionellen Frontend-Projekten regelmäßig explizit gefordert wird (Stichwort WCAG).
 
 **Zentraler HTTP-Interceptor statt Wiederholung pro Aufruf** – [credentialsInterceptor](../frontend/src/app/core/credentials-interceptor.ts) hängt `withCredentials: true` an jede ausgehende Anfrage, damit der Auth-Cookie mitgeschickt wird. Eine Angular-Dependency-Injection-Variante desselben DRY-Gedankens wie `Depends(get_db)` im Backend: die einzelnen HTTP-Aufrufe (`Auth.login`, spätere Ticket-Aufrufe) müssen sich um diesen Aspekt nicht mehr einzeln kümmern.
@@ -417,7 +419,7 @@ Ehrlich zu benennen, was fehlt, ist selbst ein Qualitätsmerkmal. Hier die aktue
 4. ~~Rollenprüfung auf die restlichen Ticket-Endpunkte ausweiten~~ – erledigt: `require_roles`-Dependency (`DELETE`/generisches `PATCH` nur `ADMIN`/`AGENT`) + Sichtbarkeits-Filterung (`EMPLOYEE` sieht nur eigene Tickets)
 5. ~~Frontend-Login an die echte API anbinden~~ – erledigt: HttpOnly-Cookie-Auth, `Auth`-Service, Login-Seite, Route-Guard
 6. ~~Dashboard an `GET /tickets` anbinden~~ – erledigt: `TicketsService` + `resource()`, 4 Status-Tabs, Kennzahlen live berechnet
-7. ~~Ticket erstellen über die UI~~ – erledigt: `/tickets/new`, `TicketsService.create()`
+7. ~~Ticket erstellen über die UI, Ticket-Detailansicht~~ – erledigt: `/tickets/new`, klickbare Ticket-Karten öffnen ein Detail-Popup (natives `<dialog>`) mit Beschreibung
 8. Status ändern über die UI (Buttons für Claim/Lösen/Schließen/Ablehnen), Registrierungs-Seite im Frontend
 9. Weitere Tests (HTTP-Integrationstests, Auth-Endpunkte), CI um eine Test-Datenbank erweitern
 10. Politur, Deployment-Feinschliff
