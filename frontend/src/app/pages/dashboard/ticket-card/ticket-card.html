@@ -76,5 +76,27 @@
         <dd>{{ ticket().closed_at | date: 'medium' }}</dd>
       }
     </dl>
+
+    @if (statusChangeError()) {
+      <p class="error" role="alert">{{ statusChangeError() }}</p>
+    }
+
+    <!-- Nur sichtbar, wenn availableActions() ueberhaupt Eintraege hat -
+         @if statt eines leeren <div>, damit bei null verfuegbaren Aktionen
+         (z.B. ein Employee bei einem fremden/nicht eigenen Ticket) auch kein
+         leerer Rahmen im Popup uebrig bleibt. -->
+    @if (availableActions().length > 0) {
+      <div class="ticket-detail__actions">
+        @for (action of availableActions(); track action.targetStatus) {
+          <button
+            type="button"
+            class="ticket-detail__action"
+            [disabled]="isChangingStatus()"
+            (click)="changeStatus(action.targetStatus)">
+            {{ action.label }}
+          </button>
+        }
+      </div>
+    }
   </div>
 </dialog>

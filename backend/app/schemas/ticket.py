@@ -64,3 +64,9 @@ class TicketRead(TicketBase):
     updated_at: datetime
     resolved_at: datetime | None
     closed_at: datetime | None
+    # KEIN Feld auf dem Ticket-Model - wird beim Serialisieren im Router aus
+    # get_allowed_next_statuses(ticket, current_user) befuellt (siehe tickets.py).
+    # Default [] noetig, weil TicketRead.model_validate(ticket) dieses Feld sonst
+    # (da es auf dem SQLAlchemy-Model nicht existiert) nicht befuellen koennte -
+    # der eigentliche Wert wird direkt danach per model_copy(update=...) gesetzt.
+    allowed_transitions: list[TicketStatus] = []

@@ -53,6 +53,15 @@ export class Dashboard {
     loader: () => firstValueFrom(this.ticketsService.list()),
   });
 
+  // Wird per (statusChanged) aus einer TicketCard aufgerufen, wenn dort ein
+  // Statuswechsel erfolgreich war (siehe ticket-card.ts). reload() ist eine
+  // von resource() bereitgestellte Methode, die den "loader" von oben erneut
+  // ausfuehrt - so zeigt die Liste sofort den neuen Status, ohne dass die
+  // ganze Dashboard-Komponente neu aufgebaut werden muss.
+  protected reloadTickets(): void {
+    this.ticketsResource.reload();
+  }
+
   // .value() ist bis zum ersten erfolgreichen Laden undefined - mit ?? [] hat
   // der Rest der Komponente immer ein echtes Array, ohne ueberall extra auf
   // undefined pruefen zu muessen. "??" ist der Nullish-Coalescing-Operator:

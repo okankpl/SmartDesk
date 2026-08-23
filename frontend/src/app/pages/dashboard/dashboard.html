@@ -69,7 +69,10 @@
              Array LEER ist - Angular prueft das selbst, kein "if (list.length
              === 0)" noetig. -->
         @for (ticket of visibleTickets(); track ticket.id) {
-          <app-ticket-card [ticket]="ticket" />
+          <!-- (statusChanged): TicketCard weiss nicht, WIE die Gesamtliste neu
+               geladen wird - sie meldet nur "bei mir hat sich was getan" nach
+               oben, Dashboard entscheidet, was daraufhin passiert. -->
+          <app-ticket-card [ticket]="ticket" (statusChanged)="reloadTickets()" />
         } @empty {
           <p class="empty-state">Keine Tickets in dieser Ansicht.</p>
         }

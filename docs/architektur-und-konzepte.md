@@ -272,6 +272,8 @@ stateDiagram-v2
     CLOSED --> [*]
 ```
 
+**Wie die Statuswechsel-Buttons im Frontend wissen, was gerade erlaubt ist:** [get_allowed_next_statuses](../backend/app/services/ticket_lifecycle.py) berechnet pro Ticket und eingeloggtem Nutzer, welche Übergänge JETZT erlaubt wären – dieselbe `ALLOWED_TRANSITIONS`-Tabelle wie oben, nur als Liste statt als Exception. Der Router hängt das Ergebnis als `allowed_transitions`-Feld an jede Ticket-Antwort (`_to_ticket_read` in `tickets.py`). Das Frontend zeigt dadurch nur Buttons, die auch wirklich funktionieren würden – bewusst **keine** zweite, im Frontend gepflegte Kopie der Regeln: zwei getrennte Quellen der Wahrheit für dieselbe Regel könnten auseinanderlaufen, genau wie es dem Feldnamen `full_name`/`fullName` schon einmal passiert ist (siehe Abschnitt 8).
+
 **Warum `requester_id` und `assignee_id` als zwei getrennte Felder?** Weil "wer hat's gemeldet" und "wer bearbeitet's gerade" unterschiedliche Dinge sind, die sich unabhängig voneinander ändern (ein Ticket kann den Bearbeiter wechseln, der Melder bleibt immer gleich).
 
 ---
@@ -405,7 +407,7 @@ Ehrlich zu benennen, was fehlt, ist selbst ein Qualitätsmerkmal. Hier die aktue
 | CORS/Cookie-Flags fest auf `localhost:4200` bzw. `secure=False` | Passt für lokale Entwicklung (`Secure`-Cookies würden ohne HTTPS gar nicht erst gesendet) | in Produktion über Umgebungsvariablen konfigurierbar machen, `secure=True` sobald HTTPS läuft |
 | Frontends `API_URL` ist im Code hart auf `http://localhost:8000` gesetzt | Es gibt noch keine echte Deployment-Umgebung | Angular-`environment.ts`-Dateien pro Umgebung (dev/prod), analog zur Backend-`.env` |
 | Keine Registrierungs-Seite im Frontend | Bewusst zurückgestellt, um den Login-Flow zuerst fertig zu bekommen | Formular analog zu `login.ts`, ruft `POST /auth/register` auf |
-| Kein Bearbeiten/Statuswechsel über die UI (Erstellen jetzt möglich) | `PATCH /tickets/{id}/status` existiert bereits im Backend, UI-Anbindung fehlt noch | Buttons für erlaubte Statuswechsel je nach Rolle/aktuellem Status (könnten clientseitig aus derselben `ALLOWED_TRANSITIONS`-Kenntnis ein-/ausgeblendet werden wie im Backend) |
+| Kein Bearbeiten von Titel/Beschreibung/Priorität/Zuweisung über die UI (Erstellen und Statuswechsel gehen bereits) | `PATCH /tickets/{id}` existiert bereits im Backend, UI-Anbindung fehlt noch | Formular analog zu `/tickets/new`, vorausgefüllt mit den aktuellen Werten |
 | Noch keine echten HTTP-Integrationstests (nur reine Unit-Tests für `security.py`/`ticket_lifecycle.py`) | Bisheriger Testfokus lag bewusst auf isolierter, ohne DB testbarer Logik | FastAPIs `TestClient` + eine Test-Datenbank (z.B. SQLite in-memory oder ein Test-Postgres-Container in der CI) |
 | `requirements.txt` pinnt nur Untergrenzen (`fastapi>=0.115`), keine exakten Versionen | Beim Projektstart bewusst einfach gehalten | für reproduzierbare Installationen exakte Versionen pinnen (`==`) oder ein Lockfile-Tool wie `pip-compile`/`uv` einsetzen – ein frischer `pip install` kann sonst Monate später eine deutlich neuere, potenziell inkompatible Version ziehen (bei einer lokalen Testinstallation im August 2026 beobachtet: FastAPI 0.141 statt der beim Projektstart verwendeten Version) |
 
@@ -420,8 +422,9 @@ Ehrlich zu benennen, was fehlt, ist selbst ein Qualitätsmerkmal. Hier die aktue
 5. ~~Frontend-Login an die echte API anbinden~~ – erledigt: HttpOnly-Cookie-Auth, `Auth`-Service, Login-Seite, Route-Guard
 6. ~~Dashboard an `GET /tickets` anbinden~~ – erledigt: `TicketsService` + `resource()`, 4 Status-Tabs, Kennzahlen live berechnet
 7. ~~Ticket erstellen über die UI, Ticket-Detailansicht~~ – erledigt: `/tickets/new`, klickbare Ticket-Karten öffnen ein Detail-Popup (natives `<dialog>`) mit Beschreibung
-8. Status ändern über die UI (Buttons für Claim/Lösen/Schließen/Ablehnen), Registrierungs-Seite im Frontend
-9. Weitere Tests (HTTP-Integrationstests, Auth-Endpunkte), CI um eine Test-Datenbank erweitern
-10. Politur, Deployment-Feinschliff
+8. ~~Status ändern über die UI~~ – erledigt: Backend berechnet `allowed_transitions` pro Ticket/Nutzer, Frontend zeigt nur passende Buttons (Claim/Lösen/Schließen/Ablehnen)
+9. Registrierungs-Seite im Frontend
+10. Weitere Tests (HTTP-Integrationstests, Auth-Endpunkte), CI um eine Test-Datenbank erweitern
+11. Politur, Deployment-Feinschliff
 
 Ausführlicher Phasenplan: siehe die Commit-Historie (`git log`) – jeder Phasen-Commit beschreibt, was dazukam und warum.

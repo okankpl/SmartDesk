@@ -3,7 +3,7 @@ from fastapi import HTTPException
 
 from app.models.ticket import Ticket, TicketStatus
 from app.models.user import User, UserRole
-from app.services.ticket_lifecycle import apply_status_transition
+from app.services.ticket_lifecycle import apply_status_transition, get_allowed_next_statuses
 
 # Ticket/User sind SQLAlchemy-Models, lassen sich aber wie ganz normale Python-
 # Objekte instanziieren, solange man sie nie einer DB-Session hinzufuegt - genau
@@ -111,3 +111,54 @@ def test_closed_ticket_has_no_further_transitions():
         apply_status_transition(ticket, TicketStatus.IN_PROGRESS, admin)
 
     assert exc_info.value.status_code == 409
+
+
+# --- get_allowed_next_statuses: dieselben Regeln, jetzt als Liste statt als
+# Exception - die Buttons im Frontend haengen direkt an diesen Ergebnissen. ---
+
+
+def test_agent_sees_claim_option_on_open_ticket():
+    ticket = make_ticket(TicketStatus.OPEN)
+    agent = make_user(UserRole.AGENT)
+
+    assert get_allowed_next_statuses(ticket, agent) == [TicketStatus.IN_PROGRESS]
+
+
+def test_employee_sees_no_options_on_open_ticket():
+    """Ein Employee darf bei OPEN gar nichts ausloesen - leere Liste, kein Fehler."""
+    ticket = make_ticket(TicketStatus.OPEN)
+    employee = make_user(UserRole.EMPLOYEE)
+
+    assert get_allowed_next_statuses(ticket, employee) == []
+
+
+def test_admin_sees_both_options_on_resolved_ticket():
+    """RESOLVED hat zwei moegliche Ziele (CLOSED, IN_PROGRESS) - fuer einen Admin
+    sind beide erlaubt, die Reihenfolge folgt der Definition in ALLOWED_TRANSITIONS."""
+    ticket = make_ticket(TicketStatus.RESOLVED)
+    admin = make_user(UserRole.ADMIN)
+
+    assert get_allowed_next_statuses(ticket, admin) == [TicketStatus.CLOSED, TicketStatus.IN_PROGRESS]
+
+
+def test_requester_sees_only_reject_option_on_own_resolved_ticket():
+    """Employee darf bei RESOLVED grundsaetzlich ablehnen (IN_PROGRESS), aber
+    nicht schliessen (CLOSED, nur Admin) - und nur beim eigenen Ticket."""
+    requester = make_user(UserRole.EMPLOYEE, user_id=7)
+    ticket = make_ticket(TicketStatus.RESOLVED, requester_id=7)
+
+    assert get_allowed_next_statuses(ticket, requester) == [TicketStatus.IN_PROGRESS]
+
+
+def test_other_employee_sees_no_options_on_foreign_resolved_ticket():
+    ticket = make_ticket(TicketStatus.RESOLVED, requester_id=7)
+    other_employee = make_user(UserRole.EMPLOYEE, user_id=99)
+
+    assert get_allowed_next_statuses(ticket, other_employee) == []
+
+
+def test_closed_ticket_has_no_options_for_anyone():
+    ticket = make_ticket(TicketStatus.CLOSED)
+    admin = make_user(UserRole.ADMIN)
+
+    assert get_allowed_next_statuses(ticket, admin) == []

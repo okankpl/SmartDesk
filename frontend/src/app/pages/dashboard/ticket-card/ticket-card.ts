@@ -4,12 +4,16 @@
 // aufrufen), statt alles rein deklarativ ueber Bindings zu steuern.
 // viewChild() liest eine mit #name im Template markierte Stelle aus (siehe
 // #detailDialog in ticket-card.html) - das Angular-Gegenstueck zu
-// document.querySelector(...), nur reaktiv und typsicher.
-import { Component, ElementRef, computed, input, viewChild } from '@angular/core';
+// document.querySelector(...), nur reaktiv und typsicher. output() erzeugt
+// ein Signal-basiertes Event, das die Elternkomponente (Dashboard) per
+// (statusChanged)="..." abonnieren kann - das Angular-Gegenstueck zum
+// aelteren @Output() EventEmitter, nur ohne Decorator/Klasse.
+import { Component, ElementRef, computed, inject, input, output, signal, viewChild } from '@angular/core';
 // DatePipe ist die Klasse hinter dem "| date"-Pipe-Syntax im Template
 // (siehe ticket-card.html) - Pipes muessen wie Komponenten/Direktiven im
 // "imports"-Array der Standalone-Komponente aufgefuehrt werden.
 import { DatePipe } from '@angular/common';
+import { TicketsService } from '../../../core/tickets/tickets';
 import { Ticket, TicketPriority, TicketStatus } from '../../../core/tickets/ticket';
 
 // Record<TicketStatus, string> ist ein TypeScript-Utility-Type: "ein Objekt,
@@ -34,6 +38,20 @@ const PRIORITY_LABELS: Record<TicketPriority, string> = {
   critical: 'Kritisch',
 };
 
+// Beschriftung fuer die Aktions-Buttons im Detail-Popup - verschachtelt nach
+// AKTUELLEM Status, weil derselbe Ziel-Status je nach Ausgangslage eine andere
+// Bedeutung hat: IN_PROGRESS ist von OPEN aus gesehen ein "Übernehmen", von
+// RESOLVED aus gesehen dagegen ein "Ablehnen" (siehe ALLOWED_TRANSITIONS in
+// ticket_lifecycle.py, das ist genau dieselbe Struktur). "Partial<...>", weil
+// nicht jeder Status ein Ziel fuer jeden Ausgangsstatus hat (CLOSED hat z.B.
+// gar keine Eintraege).
+const TRANSITION_ACTION_LABELS: Record<TicketStatus, Partial<Record<TicketStatus, string>>> = {
+  open: { in_progress: 'Übernehmen' },
+  in_progress: { resolved: 'Als gelöst markieren' },
+  resolved: { closed: 'Schließen', in_progress: 'Ablehnen' },
+  closed: {},
+};
+
 @Component({
   selector: 'app-ticket-card',
   imports: [DatePipe],
@@ -41,6 +59,8 @@ const PRIORITY_LABELS: Record<TicketPriority, string> = {
   styleUrl: './ticket-card.scss'
 })
 export class TicketCard {
+  private readonly ticketsService = inject(TicketsService);
+
   // input.required<Ticket>() erklaert eine PFLICHT-Eingabe: die Elternkomponente
   // (Dashboard, per [ticket]="ticket" in dashboard.html) MUSS ein Ticket
   // reinreichen, sonst meldet Angular schon beim Kompilieren einen Fehler.
@@ -49,11 +69,35 @@ export class TicketCard {
   // reagieren alle computed()s unten automatisch darauf.
   readonly ticket = input.required<Ticket>();
 
+  // Feuert, nachdem ein Statuswechsel erfolgreich war - Dashboard reagiert
+  // darauf, indem es die Ticketliste neu laedt (siehe dashboard.html). Diese
+  // Komponente kennt die Gesamtliste gar nicht, deshalb kann/soll sie sie
+  // nicht selbst neu laden - sie meldet nur "bei mir hat sich was getan"
+  // nach oben (unidirektionaler Datenfluss: Daten fliessen von Dashboard
+  // runter zu TicketCard per Input, Ereignisse fliessen per Output wieder hoch).
+  readonly statusChanged = output<void>();
+
   // Beschriftung für das Status-Badge, abgeleitet aus dem aktuellen Ticket-Status.
   protected readonly statusLabel = computed(() => STATUS_LABELS[this.ticket().status]);
 
   // Beschriftung für das Prioritäts-Badge, abgeleitet aus der aktuellen Priorität.
   protected readonly priorityLabel = computed(() => PRIORITY_LABELS[this.ticket().priority]);
+
+  // Baut aus ticket().allowed_transitions (vom Backend berechnet, siehe
+  // ticket.ts) die anzuzeigenden Buttons: pro erlaubtem Ziel-Status ein
+  // {status, label}-Paar. Zeigt NIE einen Button fuer einen Uebergang, den
+  // der aktuelle Nutzer laut Backend gerade nicht ausloesen duerfte.
+  protected readonly availableActions = computed(() => {
+    const currentTicket = this.ticket();
+    const labelsForCurrentStatus = TRANSITION_ACTION_LABELS[currentTicket.status];
+    return currentTicket.allowed_transitions.map((targetStatus) => ({
+      targetStatus,
+      label: labelsForCurrentStatus[targetStatus] ?? STATUS_LABELS[targetStatus],
+    }));
+  });
+
+  protected readonly isChangingStatus = signal(false);
+  protected readonly statusChangeError = signal<string | null>(null);
 
   // Referenz auf das native <dialog>-Element im Template. Ein <dialog> bringt
   // Fokus-Handling, Escape-zum-Schließen und den Hintergrund-Abdunkler
@@ -71,6 +115,7 @@ export class TicketCard {
   // Angular-spezifisches API) - macht es sichtbar UND modal (Rest der Seite
   // per Tab-Taste nicht mehr erreichbar, ::backdrop erscheint automatisch).
   protected openDetails(): void {
+    this.statusChangeError.set(null);
     this.dialog().nativeElement.showModal();
   }
 
@@ -91,5 +136,29 @@ export class TicketCard {
     if (event.target === this.dialog().nativeElement) {
       this.closeDetails();
     }
+  }
+
+  // Wird per (click) auf einen der Aktions-Buttons ausgeloest.
+  protected changeStatus(targetStatus: TicketStatus): void {
+    this.isChangingStatus.set(true);
+    this.statusChangeError.set(null);
+
+    this.ticketsService.updateStatus(this.ticket().id, targetStatus).subscribe({
+      next: () => {
+        this.isChangingStatus.set(false);
+        // Der Dialog zeigt sonst weiter den ALTEN Status/die alten Buttons an,
+        // bis Dashboard neu geladen hat und diese Komponente mit einem neuen
+        // ticket()-Wert neu aufgebaut wird - einfacher, ihn direkt zu schliessen.
+        this.closeDetails();
+        this.statusChanged.emit();
+      },
+      error: () => {
+        // z.B. 409, wenn zwischenzeitlich schon jemand anders den Status
+        // geaendert hat (Wettlaufsituation) - dem Nutzer eine verstaendliche
+        // Meldung zeigen statt den Fehler stillschweigend zu verschlucken.
+        this.isChangingStatus.set(false);
+        this.statusChangeError.set('Aktion nicht möglich. Vielleicht wurde das Ticket gerade geändert - Seite neu laden.');
+      },
+    });
   }
 }

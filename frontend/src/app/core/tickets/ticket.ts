@@ -37,4 +37,12 @@ export interface Ticket {
   updated_at: string;
   resolved_at: string | null;
   closed_at: string | null;
+  // Vom Backend fuer GENAU den aktuell eingeloggten Nutzer berechnet (siehe
+  // get_allowed_next_statuses in ticket_lifecycle.py) - welche Status-Wechsel
+  // JETZT erlaubt waeren. Bewusst NICHT im Frontend nachgebaut: die Regeln
+  // (wer darf was, plus "nur der Melder darf ablehnen") haengen vom aktuellen
+  // Status UND der Rolle UND teils der Ticket-Zugehoerigkeit ab - eine zweite,
+  // im Frontend gepflegte Kopie dieser Regeln koennte genauso auseinanderlaufen
+  // wie es dem full_name/fullName-Feldnamen schon einmal passiert ist.
+  allowed_transitions: TicketStatus[];
 }

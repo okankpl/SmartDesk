@@ -184,3 +184,41 @@
 .ticket-detail__meta dd {
   margin: 0;
 }
+
+.ticket-detail .error {
+  margin: 0;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.375rem;
+  background: #fbe7e7;
+  color: #a13636;
+  font-size: 0.875rem;
+}
+
+.ticket-detail__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #d9e1ea;
+}
+
+.ticket-detail__action {
+  padding: 0.5rem 0.875rem;
+  border: 1px solid #2d5d7b;
+  border-radius: 0.375rem;
+  background: #ffffff;
+  color: #2d5d7b;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ticket-detail__action:hover {
+  background: #eef4f8;
+}
+
+.ticket-detail__action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

@@ -18,10 +18,9 @@ Warum welche Technologie gewählt wurde, wichtige Konzepte (Docker, Hashing, JWT
 - **Rollenbasierte Autorisierung auf allen Ticket-Endpunkten** – `employee` sieht nur eigene Tickets, `PATCH`/`DELETE` sind `agent`/`admin` vorbehalten, getestet
 - **Login-Flow steht** – Frontend loggt sich gegen das echte Backend ein, Session per HttpOnly-Cookie (kein Token im Frontend-JS lesbar), Route-Guard schützt das Dashboard
 - **Dashboard zeigt echte Daten** – Kennzahlen und die vier Status-Ansichten kommen live aus `GET /tickets`, nicht mehr aus Mock-Daten
-- **Ticket erstellen & Details ansehen über die Oberfläche** – `/tickets/new`, anklickbare Ticket-Karten öffnen ein Detail-Popup mit Beschreibung
-- **Statuswechsel geht noch nicht über die Oberfläche** – Claim/Lösen/Schließen/Ablehnen bisher nur über die API (Swagger UI)
+- **Ticket erstellen, Details ansehen & Status ändern über die Oberfläche** – `/tickets/new`, anklickbare Ticket-Karten öffnen ein Detail-Popup mit Beschreibung und passenden Aktions-Buttons (Claim/Lösen/Schließen/Ablehnen) – welche Buttons erscheinen, berechnet das Backend pro Rolle/Status, nicht das Frontend
 
-Nächste Schritte: Statuswechsel über die Oberfläche, Registrierungs-Seite, dann Tests/CI erweitern.
+Nächste Schritte: Registrierungs-Seite im Frontend, dann Tests/CI erweitern.
 
 ## Backend lokal starten
 

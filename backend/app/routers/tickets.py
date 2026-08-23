@@ -7,9 +7,25 @@ from app.core.deps import get_current_user, require_roles
 from app.models.ticket import Ticket
 from app.models.user import User, UserRole
 from app.schemas.ticket import TicketCreate, TicketRead, TicketStatusUpdate, TicketUpdate
-from app.services.ticket_lifecycle import apply_status_transition
+from app.services.ticket_lifecycle import apply_status_transition, get_allowed_next_statuses
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
+
+
+def _to_ticket_read(ticket: Ticket, current_user: User) -> TicketRead:
+    """Baut die API-Antwort fuer EIN Ticket, inklusive allowed_transitions fuer
+    GENAU current_user - deshalb kein einfaches response_model=TicketRead direkt
+    auf dem ORM-Objekt (das kaeme ohne diese Zusatzinfo aus), sondern jeder
+    Endpunkt unten reicht current_user explizit hier durch.
+    model_validate(...): liest die uebrigen Felder direkt von den
+    SQLAlchemy-Attributen (moeglich dank from_attributes=True im Schema).
+    model_copy(update=...): erzeugt eine Kopie des validierten Modells mit
+    genau einem zusaetzlich ueberschriebenen Feld.
+    """
+    return TicketRead.model_validate(ticket).model_copy(
+        update={"allowed_transitions": get_allowed_next_statuses(ticket, current_user)}
+    )
+
 
 # Depends(get_current_user) an jedem Endpunkt: FastAPI ruft die Dependency vor
 # der jeweiligen Funktion auf, prueft den JWT und laedt den eingeloggten User -
@@ -22,14 +38,15 @@ router = APIRouter(prefix="/tickets", tags=["tickets"])
 
 
 @router.get("", response_model=list[TicketRead])
-def list_tickets(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[Ticket]:
+def list_tickets(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[TicketRead]:
     query = select(Ticket)
     # EMPLOYEE sieht nur selbst gemeldete Tickets (Datenschutz: fremde Anliegen
     # sind nicht automatisch fuer alle sichtbar). AGENT/ADMIN sehen alles - sie
     # muessen ja Tickets bearbeiten koennen, die sie nicht selbst gemeldet haben.
     if current_user.role == UserRole.EMPLOYEE:
         query = query.where(Ticket.requester_id == current_user.id)
-    return list(db.execute(query).scalars().all())
+    tickets = db.execute(query).scalars().all()
+    return [_to_ticket_read(ticket, current_user) for ticket in tickets]
 
 
 @router.post("", response_model=TicketRead, status_code=status.HTTP_201_CREATED)
@@ -37,7 +54,7 @@ def create_ticket(
     payload: TicketCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> Ticket:
+) -> TicketRead:
     # requester_id kommt jetzt aus dem eingeloggten Nutzer, nicht mehr vom Client
     # (siehe TicketCreate-Docstring) - ein separater Existenz-Check entfaellt damit,
     # current_user existiert per Definition (sonst haette get_current_user schon
@@ -46,11 +63,13 @@ def create_ticket(
     db.add(ticket)
     db.commit()
     db.refresh(ticket)
-    return ticket
+    return _to_ticket_read(ticket, current_user)
 
 
 @router.get("/{ticket_id}", response_model=TicketRead)
-def get_ticket(ticket_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> Ticket:
+def get_ticket(
+    ticket_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+) -> TicketRead:
     ticket = db.get(Ticket, ticket_id)
     # Dieselbe Sichtbarkeitsregel wie list_tickets, hier als "gehoert das
     # Ticket ueberhaupt zu mir"-Check statt als Filter. Bewusst derselbe 404
@@ -59,7 +78,7 @@ def get_ticket(ticket_id: int, db: Session = Depends(get_db), current_user: User
     # Authorization / IDOR-Vermeidung, siehe Lernnotizen "Mass Assignment").
     if ticket is None or (current_user.role == UserRole.EMPLOYEE and ticket.requester_id != current_user.id):
         raise HTTPException(status_code=404, detail="Ticket nicht gefunden")
-    return ticket
+    return _to_ticket_read(ticket, current_user)
 
 
 @router.patch("/{ticket_id}", response_model=TicketRead)
@@ -71,7 +90,7 @@ def update_ticket(
     # EMPLOYEE greift nach dem Erstellen nur noch ueber den Statuswechsel-
     # Endpunkt ein (Ablehnen einer Loesung, siehe ticket_lifecycle.py).
     current_user: User = Depends(require_roles(UserRole.AGENT, UserRole.ADMIN)),
-) -> Ticket:
+) -> TicketRead:
     ticket = db.get(Ticket, ticket_id)
     if ticket is None:
         raise HTTPException(status_code=404, detail="Ticket nicht gefunden")
@@ -92,7 +111,7 @@ def update_ticket(
 
     db.commit()
     db.refresh(ticket)
-    return ticket
+    return _to_ticket_read(ticket, current_user)
 
 
 @router.patch("/{ticket_id}/status", response_model=TicketRead)
@@ -101,7 +120,7 @@ def update_ticket_status(
     payload: TicketStatusUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> Ticket:
+) -> TicketRead:
     ticket = db.get(Ticket, ticket_id)
     if ticket is None:
         raise HTTPException(status_code=404, detail="Ticket nicht gefunden")
@@ -113,7 +132,7 @@ def update_ticket_status(
 
     db.commit()
     db.refresh(ticket)
-    return ticket
+    return _to_ticket_read(ticket, current_user)
 
 
 @router.delete("/{ticket_id}", status_code=status.HTTP_204_NO_CONTENT)

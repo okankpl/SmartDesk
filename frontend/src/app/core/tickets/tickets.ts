@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
 import { API_URL } from '../api-url';
-import { Ticket, TicketPriority } from './ticket';
+import { Ticket, TicketPriority, TicketStatus } from './ticket';
 
 // Nur die Felder, die der Client beim Erstellen wirklich mitgeben darf - kein
 // status (startet immer auf "open", serverseitig per Default), kein
@@ -40,5 +40,13 @@ export class TicketsService {
   // anmelden", benachrichtigt zu werden, sobald die Antwort da ist.
   create(newTicket: NewTicket): Observable<Ticket> {
     return this.http.post<Ticket>(`${API_URL}/tickets`, newTicket);
+  }
+
+  // Ruft PATCH /tickets/{id}/status auf. Ob dieser Aufruf ueberhaupt Sinn
+  // ergibt (also ob newStatus in ticket.allowed_transitions steht), prueft
+  // NICHT dieser Service - das entscheidet die aufrufende Komponente anhand
+  // der vom Backend gelieferten allowed_transitions (siehe ticket-card.ts).
+  updateStatus(ticketId: number, newStatus: TicketStatus): Observable<Ticket> {
+    return this.http.patch<Ticket>(`${API_URL}/tickets/${ticketId}/status`, { status: newStatus });
   }
 }

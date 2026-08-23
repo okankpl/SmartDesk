@@ -81,3 +81,25 @@ def apply_status_transition(ticket: Ticket, new_status: TicketStatus, current_us
         ticket.resolved_at = now
     elif new_status == TicketStatus.CLOSED:
         ticket.closed_at = now
+
+
+def get_allowed_next_statuses(ticket: Ticket, current_user: User) -> list[TicketStatus]:
+    """Berechnet, zu welchen Status current_user DIESES Ticket JETZT ueberfuehren
+    darf - dieselben drei Pruefungen wie apply_status_transition (existiert der
+    Uebergang, passt die Rolle, bei EMPLOYEE zusaetzlich: ist es das eigene
+    Ticket), nur als Liste statt als Exception.
+
+    Wird beim Serialisieren eines Tickets aufgerufen (siehe tickets.py), damit
+    das Frontend nur Buttons anzeigt, die auch wirklich funktionieren wuerden -
+    absichtlich dieselbe Regel-Tabelle (ALLOWED_TRANSITIONS) wie oben, damit es
+    nur EINE Quelle der Wahrheit fuer "wer darf was" gibt, nicht zwei getrennt
+    gepflegte (Backend-Pruefung und Frontend-Anzeige), die auseinanderlaufen
+    koennten.
+    """
+    possible_transitions = ALLOWED_TRANSITIONS.get(ticket.status, {})
+    return [
+        new_status
+        for new_status, allowed_roles in possible_transitions.items()
+        if current_user.role in allowed_roles
+        and not (current_user.role == UserRole.EMPLOYEE and current_user.id != ticket.requester_id)
+    ]
