@@ -1,0 +1,29 @@
+<div class="login-page">
+  <form class="login-card" (submit)="submit($event)">
+    <p class="brand">SmartDesk</p>
+    <h1>Anmelden</h1>
+
+    <label class="field">
+      <span>E-Mail</span>
+      <input type="email" [value]="email()" (input)="onEmailInput($event)" required autocomplete="email" />
+    </label>
+
+    <label class="field">
+      <span>Passwort</span>
+      <input
+        type="password"
+        [value]="password()"
+        (input)="onPasswordInput($event)"
+        required
+        autocomplete="current-password" />
+    </label>
+
+    @if (errorMessage()) {
+      <p class="error" role="alert">{{ errorMessage() }}</p>
+    }
+
+    <button type="submit" [disabled]="isSubmitting()">
+      {{ isSubmitting() ? 'Wird geprüft…' : 'Anmelden' }}
+    </button>
+  </form>
+</div>

@@ -290,11 +290,43 @@ stateDiagram-v2
 
 **Was bewusst noch NICHT geprüft wird:** `RegisterRequest.email` ist aktuell ein einfacher `str` (kein Format-Check wie "enthält @"), und `RegisterRequest.password` hat keine Mindestlänge. Das ist keine Nachlässigkeit, sondern ein dokumentierter offener Punkt – siehe [Abschnitt 9](#9-bewusste-einschränkungen--offene-punkte) für die konkrete Lösung, die dafür ansteht.
 
+### Wie der Token im Browser gespeichert wird: HttpOnly-Cookie statt localStorage
+
+Eine SPA muss den JWT irgendwo zwischen Login und jeder folgenden Anfrage aufbewahren. Zwei verbreitete Optionen und die Abwägung dahinter:
+
+| Option | Vorteil | Risiko |
+|---|---|---|
+| `localStorage` | einfach, reiner Frontend-Code | per JavaScript auslesbar – bei einer XSS-Lücke irgendwo in der App kann eingeschleuster Code den Token direkt stehlen |
+| `HttpOnly`-Cookie | für JavaScript unsichtbar (`document.cookie` zeigt ihn nicht), Browser hängt ihn automatisch an jede Anfrage | verlagert das Risiko auf **CSRF** (eine fremde Seite könnte eine Anfrage auslösen, die der Browser mit dem Cookie versieht) |
+
+SmartDesk verwendet den **HttpOnly-Cookie**. Eine naheliegende Alternative – den Token einfach *verschlüsselt* in `localStorage` ablegen – löst das Problem nicht wirklich: der Schlüssel zum Entschlüsseln müsste ebenfalls im Frontend-Code liegen, und genau dort läuft bei einer XSS-Lücke auch der eingeschleuste Angreifer-Code – er hätte also denselben Zugriff auf die Entschlüsselung wie die App selbst. Nur ein für JavaScript grundsätzlich unerreichbarer Speicherort (der Cookie mit `HttpOnly`-Flag) schließt diesen Angriffsweg tatsächlich.
+
+Die verbleibende CSRF-Lücke wird über das Cookie-Attribut `SameSite=Lax` eingedämmt ([login](../backend/app/routers/auth.py)): der Browser schickt den Cookie dann nicht bei Anfragen mit, die von einer anderen Seite ausgelöst werden.
+
+**Konsequenz für die API:** `POST /auth/login` liefert den Token weiterhin zusätzlich im JSON-Body zurück (`TokenResponse`) – nicht fürs Frontend, sondern damit Swagger UI (`/docs`) und manuelle Tests per curl weiterhin über den klassischen `Authorization`-Header funktionieren. Das Angular-Frontend liest dieses Feld bewusst nie. `get_current_user` akzeptiert deshalb beide Quellen (Header ODER Cookie, siehe [deps.py](../backend/app/core/deps.py)), und da das Frontend den Token selbst nie sieht, gibt es `GET /auth/me`: einen Endpunkt, der anhand des Cookies zurückmeldet, wer aktuell eingeloggt ist – genutzt beim Start der Angular-App, um nach einem Seiten-Reload den Session-Status wiederherzustellen (siehe [Auth-Service](../frontend/src/app/core/auth/auth.ts)).
+
+```mermaid
+sequenceDiagram
+    participant B as Browser (Angular)
+    participant A as auth.py
+    participant D as deps.py
+
+    B->>A: POST /auth/login (email, password)
+    A-->>B: Set-Cookie: access_token=... (HttpOnly)<br/>Body: {access_token, token_type}
+    Note over B: Angular ignoriert access_token im Body,<br/>der Cookie ist ohnehin fuer JS unsichtbar
+
+    B->>A: GET /auth/me (Cookie wird vom Browser automatisch mitgeschickt)
+    A->>D: Depends(get_current_user)
+    D-->>A: current_user
+    A-->>B: {id, email, fullName, role}
+    Note over B: Angular setzt currentUser-Signal -> UI weiss, wer eingeloggt ist
+```
+
 ### Wie die Ticket-Endpunkte abgesichert sind
 
 `app/core/deps.py` enthält `get_current_user`, eine Dependency, die vor jedem Ticket-Endpunkt läuft (`Depends(get_current_user)` in `tickets.py`):
 
-1. `OAuth2PasswordBearer` liest den Token aus dem `Authorization: Bearer <token>`-Header.
+1. Der Token kommt aus dem `Authorization`-Header ODER dem `access_token`-Cookie (s.o.) – erste gefundene Quelle gewinnt.
 2. `decode_access_token` (aus `security.py`) prüft Signatur und Ablaufzeit – schlägt das fehl (`jwt.PyJWTError`), gibt es sofort `401`.
 3. Die `sub`-Claim aus dem Token wird als User-ID benutzt, um den `User` zu laden – existiert er nicht mehr (z.B. gelöscht), ebenfalls `401`.
 
@@ -347,6 +379,10 @@ Der Vorteil: `TicketCard` lässt sich isoliert wiederverwenden und testen, ohne 
 
 **Barrierefreiheit (Accessibility) von Anfang an mitgedacht** – `aria-label`, `role="tablist"`/`role="tab"`, `aria-selected` sind bereits im Code (`dashboard.html`, `main-layout.html`). Das ist keine nachträgliche Fleißaufgabe, sondern ein Qualitätsmerkmal, das in professionellen Frontend-Projekten regelmäßig explizit gefordert wird (Stichwort WCAG).
 
+**Zentraler HTTP-Interceptor statt Wiederholung pro Aufruf** – [credentialsInterceptor](../frontend/src/app/core/credentials-interceptor.ts) hängt `withCredentials: true` an jede ausgehende Anfrage, damit der Auth-Cookie mitgeschickt wird. Eine Angular-Dependency-Injection-Variante desselben DRY-Gedankens wie `Depends(get_db)` im Backend: die einzelnen HTTP-Aufrufe (`Auth.login`, spätere Ticket-Aufrufe) müssen sich um diesen Aspekt nicht mehr einzeln kümmern.
+
+**Session-Wiederherstellung über einen App-Initializer** – `provideAppInitializer(...)` in [app.config.ts](../frontend/src/app/app.config.ts) fragt beim Start der Anwendung einmalig `GET /auth/me` ab, bevor der Router irgendeine Route auflöst. Ohne das würde [authGuard](../frontend/src/app/core/auth/auth-guard.ts) bei einem Seiten-Reload kurzzeitig fälschlich "nicht eingeloggt" annehmen, weil das `currentUser`-Signal erst nach der (asynchronen) Antwort befüllt wäre.
+
 ---
 
 ## 9. Bewusste Einschränkungen & offene Punkte
@@ -358,10 +394,12 @@ Ehrlich zu benennen, was fehlt, ist selbst ein Qualitätsmerkmal. Hier die aktue
 | `/users`-Endpunkte sind für jede eingeloggte Rolle offen | Ausdrücklich außerhalb des Ticket-Rollenkonzepts gehalten (Roadmap-Punkt betraf nur Ticket-Endpunkte) | z.B. `GET /users` auf `AGENT`/`ADMIN` beschränken (Employees brauchen kein komplettes Nutzerverzeichnis) |
 | `RegisterRequest.email` prüft kein E-Mail-Format | Bewusst zurückgestellt, um Register/Login zuerst end-to-end zum Laufen zu bringen | Pydantics `EmailStr`-Typ statt `str` (braucht das zusätzliche Package `email-validator` in `requirements.txt`) |
 | `RegisterRequest.password` hat keine Mindestlänge/-stärke | s.o. | ein `Field(min_length=8)` oder ein eigener Pydantic-`validator` |
-| Kein Logout / kein Token-Widerruf | JWTs sind zustandslos per Design (siehe Abschnitt 3) – "Widerruf" widerspricht dem Grundprinzip | entweder kurze Ablaufzeiten + Refresh-Token-Flow, oder eine serverseitige Blockliste für widerrufene Tokens |
+| Kein Token-Widerruf (nur `/auth/logout`, das löscht den Cookie, der JWT bleibt bis zum Ablauf technisch gültig) | JWTs sind zustandslos per Design (siehe Abschnitt 3) – echter Widerruf widerspricht dem Grundprinzip | entweder kurze Ablaufzeiten + Refresh-Token-Flow, oder eine serverseitige Blockliste für widerrufene Tokens |
 | `GET /tickets`, `GET /users` liefern immer die komplette (bzw. rollen-gefilterte) Liste ohne Paginierung | Für die aktuelle, kleine Testdatenmenge unkritisch | Pagination (`?limit=20&offset=0`), Standard bei jeder wachsenden REST-API |
-| CORS erlaubt fest nur `localhost:4200` | Passt für lokale Entwicklung | in Produktion über eine Umgebungsvariable konfigurierbar machen, nicht hart codieren |
-| Frontend zeigt noch Mock-Daten, ist nicht an die API angebunden | Backend mit Auth ist gerade erst fertig geworden | `HttpClient`-Service im Frontend, der `tickets`-Signal aus einem echten `GET /tickets`-Aufruf befüllt |
+| CORS/Cookie-Flags fest auf `localhost:4200` bzw. `secure=False` | Passt für lokale Entwicklung (`Secure`-Cookies würden ohne HTTPS gar nicht erst gesendet) | in Produktion über Umgebungsvariablen konfigurierbar machen, `secure=True` sobald HTTPS läuft |
+| Frontends `API_URL` ist im Code hart auf `http://localhost:8000` gesetzt | Es gibt noch keine echte Deployment-Umgebung | Angular-`environment.ts`-Dateien pro Umgebung (dev/prod), analog zur Backend-`.env` |
+| Dashboard zeigt noch Mock-Ticket-Daten, ist nicht an `GET /tickets` angebunden | Login-Flow (dieser Schritt) kam zuerst | `HttpClient`-Aufruf in `dashboard.ts`, der `tickets`-Signal aus der echten API befüllt (nächster Schritt) |
+| Keine Registrierungs-Seite im Frontend | Bewusst zurückgestellt, um den Login-Flow zuerst fertig zu bekommen | Formular analog zu `login.ts`, ruft `POST /auth/register` auf |
 | Noch keine echten HTTP-Integrationstests (nur reine Unit-Tests für `security.py`/`ticket_lifecycle.py`) | Bisheriger Testfokus lag bewusst auf isolierter, ohne DB testbarer Logik | FastAPIs `TestClient` + eine Test-Datenbank (z.B. SQLite in-memory oder ein Test-Postgres-Container in der CI) |
 | `requirements.txt` pinnt nur Untergrenzen (`fastapi>=0.115`), keine exakten Versionen | Beim Projektstart bewusst einfach gehalten | für reproduzierbare Installationen exakte Versionen pinnen (`==`) oder ein Lockfile-Tool wie `pip-compile`/`uv` einsetzen – ein frischer `pip install` kann sonst Monate später eine deutlich neuere, potenziell inkompatible Version ziehen (bei einer lokalen Testinstallation im August 2026 beobachtet: FastAPI 0.141 statt der beim Projektstart verwendeten Version) |
 
@@ -373,9 +411,10 @@ Ehrlich zu benennen, was fehlt, ist selbst ein Qualitätsmerkmal. Hier die aktue
 2. ~~Ticket-Endpunkte gegen den JWT absichern (Authentifizierung)~~ – erledigt, `get_current_user`-Dependency
 3. ~~Ticket-Lifecycle-Regeln + rollenbasierte Autorisierung für Status-Übergänge~~ – erledigt, `app/services/ticket_lifecycle.py` + `PATCH /tickets/{id}/status`
 4. ~~Rollenprüfung auf die restlichen Ticket-Endpunkte ausweiten~~ – erledigt: `require_roles`-Dependency (`DELETE`/generisches `PATCH` nur `ADMIN`/`AGENT`) + Sichtbarkeits-Filterung (`EMPLOYEE` sieht nur eigene Tickets)
-5. Frontend an die echte API anbinden (Mock-Daten raus)
-6. Kommentare/Zusatzfunktionen
-7. Weitere Tests (HTTP-Integrationstests, Auth-Endpunkte), CI um eine Test-Datenbank erweitern
-8. Politur, Deployment-Feinschliff
+5. ~~Frontend-Login an die echte API anbinden~~ – erledigt: HttpOnly-Cookie-Auth, `Auth`-Service, Login-Seite, Route-Guard
+6. Dashboard an `GET /tickets` anbinden (Mock-Ticket-Daten raus)
+7. Registrierungs-Seite im Frontend, Kommentare/Zusatzfunktionen
+8. Weitere Tests (HTTP-Integrationstests, Auth-Endpunkte), CI um eine Test-Datenbank erweitern
+9. Politur, Deployment-Feinschliff
 
 Ausführlicher Phasenplan: siehe die Commit-Historie (`git log`) – jeder Phasen-Commit beschreibt, was dazukam und warum.

@@ -1,28 +1,43 @@
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Cookie, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import decode_access_token
+from app.core.security import ACCESS_TOKEN_COOKIE_NAME, decode_access_token
 from app.models.user import User, UserRole
 
 # tokenUrl zeigt nur auf die URL, die die Swagger-UI fuer ihr "Authorize"-Formular
 # anzeigt - den eigentlichen Token liest OAuth2PasswordBearer bei jeder Anfrage
 # selbst aus dem Authorization-Header ("Bearer <token>") und reicht ihn als
 # String an die Funktion weiter, die davon abhaengt (hier: get_current_user).
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+# auto_error=False: wirft selbst KEINEN 401, wenn der Header fehlt - stattdessen
+# gibt es einfach None zurueck, damit unten der Cookie als zweite Quelle
+# geprueft werden kann (Swagger/curl nutzen den Header, das Angular-Frontend
+# den Cookie - siehe docs/architektur-und-konzepte.md, Abschnitt 6).
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
 
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+def get_current_user(
+    bearer_token: str | None = Depends(oauth2_scheme),
+    # Cookie(...) ist das Gegenstueck zu Depends()/Query()/Body(): FastAPI liest
+    # den Wert automatisch aus dem Cookie-Header der Anfrage. alias, weil der
+    # Python-Parametername anders heissen darf als der tatsaechliche Cookie-Name.
+    cookie_token: str | None = Cookie(default=None, alias=ACCESS_TOKEN_COOKIE_NAME),
+    db: Session = Depends(get_db),
+) -> User:
     """Ermittelt den eingeloggten Nutzer aus dem mitgeschickten JWT.
 
+    Der Token kann aus zwei Quellen kommen (erste gefundene gewinnt): dem
+    Authorization-Header (Swagger UI, curl, Postman) oder dem HttpOnly-Cookie
+    (das Angular-Frontend - dort ist der Token per Design nie in JavaScript
+    lesbar, siehe Lernnotizen "Token-Speicherung").
+
     Wird als Depends(get_current_user) in jeden Endpunkt eingehaengt, der eine
-    Anmeldung voraussetzt - FastAPI loest die Kette (oauth2_scheme -> hier ->
-    Endpunkt) automatisch vor jedem Request auf. Drei Faelle fuehren zu 401:
-    Token fehlt/ist ungueltig/abgelaufen, die "sub"-Claim fehlt, oder der User
-    aus der Claim existiert nicht mehr (z.B. geloescht, obwohl der Token noch
-    laeuft).
+    Anmeldung voraussetzt - FastAPI loest die Kette automatisch vor jedem
+    Request auf. Vier Faelle fuehren zu 401: kein Token in beiden Quellen,
+    Token ungueltig/abgelaufen, die "sub"-Claim fehlt, oder der User aus der
+    Claim existiert nicht mehr (z.B. geloescht, obwohl der Token noch laeuft).
     """
     unauthorized = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -31,6 +46,10 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         # 401 mitteilt, welches Auth-Schema erwartet wird - hier "Bearer".
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+    token = bearer_token or cookie_token
+    if token is None:
+        raise unauthorized
 
     try:
         payload = decode_access_token(token)

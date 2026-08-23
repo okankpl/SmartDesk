@@ -16,9 +16,10 @@ Warum welche Technologie gewählt wurde, wichtige Konzepte (Docker, Hashing, JWT
 - **Ticket-Endpunkte sind geschützt** – `/tickets` verlangt einen gültigen JWT (`Authorization: Bearer <token>`)
 - **Ticket-Lifecycle mit Rollenregeln** – `PATCH /tickets/{id}/status` prüft Status-Übergänge gegen Rollen (z.B. nur `admin` darf final schließen), getestet
 - **Rollenbasierte Autorisierung auf allen Ticket-Endpunkten** – `employee` sieht nur eigene Tickets, `PATCH`/`DELETE` sind `agent`/`admin` vorbehalten, getestet
-- **Frontend und Backend sind noch nicht verbunden** – das Dashboard zeigt weiterhin Mock-Daten
+- **Login-Flow steht** – Frontend loggt sich gegen das echte Backend ein, Session per HttpOnly-Cookie (kein Token im Frontend-JS lesbar), Route-Guard schützt das Dashboard
+- **Ticket-Daten im Dashboard sind noch Mock-Daten** – die Anbindung an `GET /tickets` ist der nächste Schritt
 
-Nächste Schritte: Frontend an die echte API anbinden, dann Tests/CI erweitern.
+Nächste Schritte: Dashboard an die echte Ticket-API anbinden, dann Tests/CI erweitern.
 
 ## Backend lokal starten
 
@@ -41,7 +42,7 @@ npm install
 npm start
 ```
 
-Läuft danach unter http://localhost:4200.
+Läuft danach unter http://localhost:4200. Es gibt noch keine Registrierungs-Seite im Frontend – einen Test-Account vorher über die Swagger UI anlegen (`POST /auth/register` unter http://localhost:8000/docs), dann damit auf http://localhost:4200/login einloggen.
 
 ## Datenbank-Migrationen (Alembic)
 

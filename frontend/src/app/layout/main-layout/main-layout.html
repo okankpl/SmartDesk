@@ -22,9 +22,14 @@
     <!-- Dauerhafte Kopfzeile -->
     <header class="topbar">
       <span>IT Service Management</span>
-      <div class="user-avatar" aria-label="Angemeldeter Benutzer Okan Kaplan">
-        OK
-      </div>
+      @if (currentUser(); as user) {
+        <div class="user-info">
+          <div class="user-avatar" [attr.aria-label]="'Angemeldeter Benutzer ' + user.fullName">
+            {{ initials() }}
+          </div>
+          <button type="button" class="logout-button" (click)="logout()">Abmelden</button>
+        </div>
+      }
     </header>
 
     <!-- Der wechselnde Seiteninhalt -->

@@ -27,6 +27,12 @@ app.add_middleware(
     # bedeutet "erlaube alle HTTP-Methoden" (GET, POST, PATCH, ...).
     allow_methods=["*"],
     allow_headers=["*"],
+    # Ohne das wuerde der Browser den Auth-Cookie NIE mitschicken, egal was das
+    # Frontend anfragt - Cookies gelten bei Cross-Origin-Anfragen (4200 -> 8000
+    # sind zwei Origins) standardmaessig als sicherheitskritisch und werden nur
+    # mitgesendet/angenommen, wenn Server UND Client das explizit erlauben
+    # (hier; im Frontend die passende Gegenstelle: withCredentials).
+    allow_credentials=True,
 )
 
 # Bindet alle Endpunkte, die in tickets.py mit @router.get/@router.post definiert sind,

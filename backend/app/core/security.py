@@ -7,6 +7,11 @@ from app.core.config import get_settings
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
+# Name des Cookies, in dem der Browser (nicht Swagger/curl - die nutzen weiter
+# den Authorization-Header) den JWT nach dem Login speichert. An einer Stelle
+# definiert, damit auth.py (setzen/loeschen) und deps.py (lesen) nicht
+# auseinanderlaufen koennen.
+ACCESS_TOKEN_COOKIE_NAME = "access_token"
 
 # bcrypt erwartet bytes statt str (die zugrundeliegende C-Bibliothek kennt kein
 # Python-/Unicode-str). encode()/decode() übersetzen zwischen beiden Welten;
