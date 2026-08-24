@@ -137,15 +137,20 @@ Test-Account über die Swagger UI anlegen (`POST /api/auth/register`), dann übe
 
 ## Laufender Betrieb
 
-**Update ausrollen** (nach `git pull` mit neuem Code):
+Die Einzelschritte aus Schritt 7/8 oben (Frontend bauen, Container neu bauen, Migrationen anwenden) sind für spätere Updates als Skript zusammengefasst – nach dem allerersten Deployment reicht:
+
 ```bash
-git pull
-docker run --rm -v "$(pwd)/frontend:/app" -w /app node:20 sh -c "npm ci && npx ng build --configuration production"
-docker compose -f docker-compose.prod.yml up -d --build
-docker compose -f docker-compose.prod.yml exec backend alembic upgrade head
+./scripts/deploy.sh
 ```
 
 **Datenbank-Backup** (Postgres-Daten liegen im Docker-Volume `postgres_data` – bei einem Server-Verlust ohne Backup sind sie weg):
 ```bash
-docker compose -f docker-compose.prod.yml exec postgres pg_dump -U smartdesk smartdesk > backup-$(date +%Y%m%d).sql
+./scripts/backup.sh
 ```
+Legt eine Datei unter `backups/` an und entfernt automatisch Backups, die älter als 7 Tage sind. Für automatische, regelmäßige Backups siehe den Cron-Hinweis am Ende des Skripts.
+
+**Erreichbarkeit überwachen:**
+```bash
+./scripts/healthcheck.sh https://<domain>/api/health
+```
+Einfaches Beispiel für automatisiertes Monitoring – schreibt bei einem Ausfall ins System-Log. Für den Cron-Job siehe den Hinweis am Ende des Skripts. Für mehr als "läuft es noch" (Metriken, Dashboards, Benachrichtigungen) sind dedizierte Tools wie Uptime Kuma oder Prometheus/Grafana der nächste Schritt.

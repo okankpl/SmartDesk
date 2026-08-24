@@ -1,0 +1,7 @@
+# Shell-Skripte MUESSEN mit Unix-Zeilenenden (LF) im Repo liegen, unabhaengig
+# vom Betriebssystem, auf dem committed wird - eine Windows-CRLF-Version wuerde
+# auf dem Linux-Server beim Ausfuehren mit "bad interpreter: .../bash^M: no
+# such file or directory" fehlschlagen, weil die Shebang-Zeile (#!/usr/bin/env
+# bash) das Windows-Zeilenende-Zeichen (^M = \r) als Teil des Programmnamens
+# missversteht.
+*.sh text eol=lf
