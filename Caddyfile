@@ -1,0 +1,31 @@
+# Caddy ist ein Webserver, der automatisch ein gueltiges HTTPS-Zertifikat von
+# Let's Encrypt holt und erneuert, sobald hier eine echte Domain (kein
+# "localhost") steht - kein manuelles certbot/openssl-Handling noetig, das ist
+# der Hauptgrund, warum diese Anleitung Caddy statt nginx empfiehlt.
+#
+# {$DOMAIN} liest die Umgebungsvariable DOMAIN, die in docker-compose.prod.yml
+# an den Caddy-Container durchgereicht wird - so landet die eigentliche Domain
+# nicht fest im Code/Git, sondern nur in der (nicht eingecheckten) .env auf
+# dem Server.
+{$DOMAIN} {
+	# Alles unter /api/* geht ans Backend. handle_path (statt handle) schneidet
+	# das "/api"-Praefix VOR der Weiterleitung ab - das Backend selbst kennt
+	# gar kein "/api", seine Routen bleiben unveraendert (/tickets, /auth/login, ...).
+	# "backend" ist der Servicename aus docker-compose.prod.yml, wie schon beim
+	# Postgres-Hostnamen im Backend selbst.
+	handle_path /api/* {
+		reverse_proxy backend:8000
+	}
+
+	# Alles andere: die gebaute Angular-App als statische Dateien ausliefern.
+	handle {
+		root * /srv/frontend
+		# try_files {path} /index.html: existiert der angefragte Pfad nicht als
+		# echte Datei (z.B. /dashboard - das ist keine Datei, sondern eine
+		# Angular-Route), liefere stattdessen index.html aus. Angulars eigener
+		# Router uebernimmt dann im Browser und zeigt die richtige Seite - ohne
+		# das wuerde ein Reload auf /dashboard einen 404 vom Server geben.
+		try_files {path} /index.html
+		file_server
+	}
+}

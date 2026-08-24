@@ -53,3 +53,7 @@ Migrationen laufen im `backend`-Container:
 docker compose exec backend alembic revision --autogenerate -m "beschreibung"
 docker compose exec backend alembic upgrade head
 ```
+
+## Deployment
+
+Anleitung für ein Deployment auf einem eigenen VPS (Docker, Caddy mit automatischem HTTPS): siehe [docs/deployment.md](docs/deployment.md).

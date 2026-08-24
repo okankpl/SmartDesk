@@ -3,6 +3,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.core.security import (
@@ -68,10 +69,11 @@ def login(
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         httponly=True,  # per JavaScript nicht lesbar - schuetzt vor Token-Diebstahl per XSS
         samesite="lax",  # wird nicht bei Cross-Site-Requests von anderen Domains mitgeschickt (CSRF-Schutz)
-        # secure=True wuerde den Cookie nur ueber HTTPS uebertragen - fuer lokale
-        # Entwicklung (http://localhost) bewusst aus, MUSS in Produktion auf
-        # True stehen (siehe Bewusste Einschraenkungen in der Architektur-Doku).
-        secure=False,
+        # secure=True wuerde den Cookie nur ueber HTTPS uebertragen. Aus
+        # get_settings().cookie_secure statt hartcodiert: lokal (http://)
+        # per Default False, in Produktion per Umgebungsvariable auf True
+        # umstellbar (siehe docs/deployment.md).
+        secure=get_settings().cookie_secure,
         path="/",
     )
     return TokenResponse(access_token=token)

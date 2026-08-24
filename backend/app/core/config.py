@@ -27,6 +27,21 @@ class Settings(BaseSettings):
     database_url: str
     secret_key: str
 
+    # Zwei production-bezogene Einstellungen mit lokal sinnvollen Defaults
+    # (= Wert, der gilt, wenn die Umgebungsvariable NICHT gesetzt ist) - anders
+    # als database_url/secret_key oben, die ohne Wert in der Umgebung einen
+    # Fehler auslösen. In der lokalen .env muss also nichts geaendert werden,
+    # nur auf dem Server (siehe docs/deployment.md).
+    #
+    # Die Herkunfts-Adresse, die CORS als "darf zugreifen" akzeptiert (siehe
+    # main.py). Lokal das Angular-Dev-Serve, in Produktion die echte Domain.
+    frontend_origin: str = "http://localhost:4200"
+    # Ob der Auth-Cookie nur ueber HTTPS uebertragen werden darf (siehe
+    # auth.py). Lokal laeuft alles ueber http://, deshalb False - in
+    # Produktion MUSS das True sein, sonst schuetzt HttpOnly allein nicht vor
+    # einem Angreifer, der den Netzwerkverkehr mitliest.
+    cookie_secure: bool = False
+
 
 # @lru_cache direkt über einer Funktion (ohne Klammern dahinter) heißt: "cache das
 # Ergebnis dieser Funktion". Beim ersten Aufruf von get_settings() wird Settings()

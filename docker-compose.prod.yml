@@ -1,0 +1,67 @@
+# Produktions-Variante von docker-compose.yml - fuer den VPS gedacht, siehe
+# docs/deployment.md. Wichtigste Unterschiede zur lokalen Datei:
+# - kein Bind-Mount fuer Live-Reload (das Backend-Image wird als fertiges,
+#   unveraenderliches Paket betrieben, kein "--reload")
+# - Postgres/Backend-Ports sind NICHT nach aussen (an den Host) geoeffnet -
+#   nur Caddy ist von aussen erreichbar, alles andere spricht nur intern im
+#   Docker-Netzwerk miteinander (Backend erreicht Postgres z.B. weiterhin
+#   einfach ueber den Hostnamen "postgres", genau wie lokal)
+# - "restart: unless-stopped": Container starten nach einem Server-Neustart
+#   oder Absturz automatisch wieder mit, ohne dass man das von Hand macht
+# - neuer Service "caddy" fuer HTTPS + Ausliefern des Frontends
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    # Ueberschreibt das CMD aus dem Dockerfile (das "--reload" enthaelt, ein
+    # reiner Entwicklungs-Komfort: Uvicorn beobachtet dabei staendig
+    # Datei-Aenderungen und startet bei jeder Aenderung neu - unnoetiger
+    # Overhead, wenn sich der Code eh nicht mehr live aendert).
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Die fertig gebaute Angular-App (siehe docs/deployment.md, "Frontend
+      # bauen") - :ro = read-only, Caddy soll hier nur lesen, nie schreiben.
+      - ./frontend/dist/frontend/browser:/srv/frontend:ro
+      # Caddys eigene Daten (u.a. die Let's-Encrypt-Zertifikate) - als Volume,
+      # damit sie einen Container-Neustart ueberleben und nicht bei jedem
+      # Neustart ein neues Zertifikat angefragt werden muss (Let's Encrypt
+      # begrenzt, wie oft man das pro Domain und Zeitraum darf).
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:

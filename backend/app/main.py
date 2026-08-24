@@ -5,6 +5,8 @@ from fastapi import FastAPI
 # CORSMiddleware liegt in einem Untermodul (fastapi.middleware.cors), daher der Punkt-Pfad.
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.core.config import get_settings
+
 # "app.routers" ist unser eigener Ordner backend/app/routers/. "tickets" ist die Datei
 # tickets.py darin. Wir importieren das ganze Modul (nicht nur eine Funktion daraus),
 # damit wir unten "tickets.router" schreiben können.
@@ -21,8 +23,12 @@ app = FastAPI(title="SmartDesk API")
 # (dieses Backend) blockieren, weil es zwei unterschiedliche Ports/Origins sind.
 app.add_middleware(
     CORSMiddleware,
-    # [...] ist eine Python-Liste. Hier: die einzige erlaubte Herkunfts-Adresse.
-    allow_origins=["http://localhost:4200"],
+    # Aus get_settings().frontend_origin statt hartcodiert - lokal per Default
+    # weiterhin localhost:4200, in Produktion per Umgebungsvariable auf die
+    # echte Domain umstellbar (siehe docs/deployment.md). [...] ist eine
+    # Python-Liste - CORSMiddleware will eine Liste erlaubter Adressen, auch
+    # wenn es bei uns nur genau eine ist.
+    allow_origins=[get_settings().frontend_origin],
     # "*" als String ist hier ein Wildcard-Wert von CORSMiddleware, kein Python-Operator -
     # bedeutet "erlaube alle HTTP-Methoden" (GET, POST, PATCH, ...).
     allow_methods=["*"],
