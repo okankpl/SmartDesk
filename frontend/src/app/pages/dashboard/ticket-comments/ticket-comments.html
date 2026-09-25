@@ -1,0 +1,82 @@
+<!-- aria-label gibt dem Abschnitt fuer Screenreader einen Namen
+     ("Kommentare"). Die sonst uebliche Variante aria-labelledby="<id>" ginge
+     hier schlecht: JEDE Ticket-Karte hat ihr eigenes Popup im DOM, eine feste
+     id koennte also mehrfach vorkommen - ids muessen aber seitenweit
+     eindeutig sein. -->
+<section class="ticket-comments" aria-label="Kommentare">
+  <h3>Kommentare</h3>
+
+  <!-- Reihenfolge der Zweige ist WICHTIG: zuerst den Fehlerfall pruefen, denn
+       comments() wirft im Fehlerzustand eine Exception (siehe Kommentar in
+       ticket-comments.ts) - im @else-Zweig ist sicher, dass kein Fehler
+       vorliegt. -->
+  @if (commentsError()) {
+    <p class="ticket-comments__error" role="alert">Kommentare konnten nicht geladen werden.</p>
+  } @else if (isLoadingComments()) {
+    <p class="ticket-comments__hint">Kommentare werden geladen…</p>
+  } @else {
+    <!-- <ol> (ordered list, nummerierte Liste) statt <ul>: die Reihenfolge
+         ist hier inhaltlich bedeutsam (Gespraechsverlauf, aelteste zuerst) -
+         das teilt <ol> auch Screenreadern mit. Die sichtbaren Nummern blendet
+         das CSS aus. -->
+    <ol class="ticket-comments__list">
+      @for (comment of comments(); track comment.id) {
+        <!-- [class.name]="bedingung" setzt die CSS-Klasse nur, wenn die
+             Bedingung true ist - hier: eigene Kommentare farblich absetzen. -->
+        <li class="ticket-comments__item" [class.ticket-comments__item--own]="isOwnComment(comment)">
+          <div class="ticket-comments__meta">
+            <strong>{{ authorLabel(comment) }}</strong>
+            <!-- <time> markiert einen Zeitpunkt maschinenlesbar:
+                 [attr.datetime] schreibt den rohen ISO-String ins
+                 datetime-ATTRIBUT (fuer Maschinen/Screenreader), der sichtbare
+                 Text ist die formatierte Variante.
+                 [attr.x] setzt direkt das HTML-ATTRIBUT x. Ohne "attr." bindet
+                 Angular an die gleichnamige DOM-PROPERTY - die heisst bei
+                 <time> aber "dateTime" (grosses T), nicht "datetime". Mit
+                 attr. schreibt man einfach den Namen, der auch im HTML stehen
+                 wuerde. -->
+            <time [attr.datetime]="comment.created_at">{{ comment.created_at | date: 'short' }}</time>
+          </div>
+          <!-- SICHERHEIT: {{ ... }} (Interpolation) behandelt den Text IMMER
+               als reinen Text, nie als HTML - schreibt jemand
+               "<script>...</script>" in einen Kommentar, erscheint genau
+               dieser Text sichtbar, statt ausgefuehrt zu werden. Schutz gegen
+               Cross-Site-Scripting (XSS). Hier deshalb NIE [innerHTML]
+               verwenden: das wuerde den Nutzertext als HTML interpretieren. -->
+          <p class="ticket-comments__body">{{ comment.body }}</p>
+        </li>
+      } @empty {
+        <li class="ticket-comments__hint">Noch keine Kommentare.</li>
+      }
+    </ol>
+
+    <!-- Formular nur im Erfolgs-Zweig: konnten die Kommentare nicht geladen
+         werden, ergibt Antworten auf einen unbekannten Verlauf keinen Sinn. -->
+    <form class="ticket-comments__form" (submit)="submit($event)">
+      <!-- <textarea> INNERHALB von <label>: verknuepft Beschriftung und Feld
+           automatisch (Klick auf "Neuer Kommentar" fokussiert das Feld,
+           Screenreader lesen die Beschriftung vor) - ohne for="..."/id="...",
+           die hier wieder pro Karte eindeutig sein muessten.
+           [value]="..." schreibt den Signal-Wert INS Feld (Signal -> Anzeige),
+           (input)="..." liest jede Tastatureingabe ZURUECK ins Signal
+           (Anzeige -> Signal) - zusammen eine Zwei-Wege-Bindung von Hand, wie
+           in ticket-create.html. -->
+      <label class="ticket-comments__label">
+        Neuer Kommentar
+        <textarea
+          rows="3"
+          [value]="newCommentBody()"
+          (input)="onBodyInput($event)"
+          [disabled]="isSubmitting()"></textarea>
+      </label>
+
+      @if (submitError()) {
+        <p class="ticket-comments__error" role="alert">{{ submitError() }}</p>
+      }
+
+      <button type="submit" class="ticket-comments__submit" [disabled]="!canSubmit()">
+        Kommentar senden
+      </button>
+    </form>
+  }
+</section>

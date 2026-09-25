@@ -10,7 +10,7 @@ from app.core.config import get_settings
 # "app.routers" ist unser eigener Ordner backend/app/routers/. "tickets" ist die Datei
 # tickets.py darin. Wir importieren das ganze Modul (nicht nur eine Funktion daraus),
 # damit wir unten "tickets.router" schreiben können.
-from app.routers import auth, tickets, users
+from app.routers import auth, comments, tickets, users
 
 # FastAPI(...) ruft den Konstruktor der Klasse auf und erzeugt ein Objekt - "app" IST
 # jetzt unsere Anwendung. title="..." ist ein Keyword-Argument (Parameter wird über
@@ -46,6 +46,7 @@ app.add_middleware(
 # der Punkt "." greift auf ein Attribut/Objekt innerhalb des Moduls zu.
 app.include_router(auth.router)
 app.include_router(tickets.router)
+app.include_router(comments.router)
 app.include_router(users.router)
 
 

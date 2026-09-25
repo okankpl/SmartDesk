@@ -25,8 +25,11 @@
      zugreifen kann. <dialog> ist ein natives HTML-Element (kein
      Angular-Erfindung); ohne showModal()/open-Attribut ist es unsichtbar,
      auch wenn es im DOM steht - deshalb erscheint dieses Popup nicht einfach
-     automatisch beim Laden der Seite. -->
-<dialog #detailDialog class="ticket-detail" (click)="onBackdropClick($event)">
+     automatisch beim Laden der Seite.
+     (close) hoert auf das native "close"-Event des <dialog>, das bei JEDER
+     Art des Schliessens feuert, auch per Escape-Taste (siehe onDialogClosed()
+     in ticket-card.ts). -->
+<dialog #detailDialog class="ticket-detail" (click)="onBackdropClick($event)" (close)="onDialogClosed()">
   <div class="ticket-detail__content">
     <header class="ticket-detail__header">
       <h2>{{ ticket().title }}</h2>
@@ -97,6 +100,18 @@
           </button>
         }
       </div>
+    }
+
+    <!-- Kommentarbereich als eigene Komponente (siehe ticket-comments.ts).
+         @if sorgt dafuer, dass sie NUR existiert, solange das Popup offen ist:
+         beim Oeffnen erzeugt Angular sie (-> sie laedt die Kommentare), beim
+         Schliessen zerstoert Angular sie wieder (-> ihr Zustand ist weg, beim
+         naechsten Oeffnen wird frisch geladen). Ohne das @if stuende sie fuer
+         JEDE Karte im Dashboard dauerhaft im DOM und jede wuerde sofort ihre
+         Kommentare laden, auch bei nie geoeffnetem Popup.
+         [ticketId]="ticket().id" reicht nur die ID als Input hinein. -->
+    @if (isDetailOpen()) {
+      <app-ticket-comments [ticketId]="ticket().id" />
     }
   </div>
 </dialog>

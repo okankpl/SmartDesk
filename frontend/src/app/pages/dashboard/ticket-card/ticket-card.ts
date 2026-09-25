@@ -15,6 +15,7 @@ import { Component, ElementRef, computed, inject, input, output, signal, viewChi
 import { DatePipe } from '@angular/common';
 import { TicketsService } from '../../../core/tickets/tickets';
 import { Ticket, TicketPriority, TicketStatus } from '../../../core/tickets/ticket';
+import { TicketComments } from '../ticket-comments/ticket-comments';
 
 // Record<TicketStatus, string> ist ein TypeScript-Utility-Type: "ein Objekt,
 // das fuer JEDEN moeglichen TicketStatus-Wert einen String-Eintrag hat, nicht
@@ -54,7 +55,7 @@ const TRANSITION_ACTION_LABELS: Record<TicketStatus, Partial<Record<TicketStatus
 
 @Component({
   selector: 'app-ticket-card',
-  imports: [DatePipe],
+  imports: [DatePipe, TicketComments],
   templateUrl: './ticket-card.html',
   styleUrl: './ticket-card.scss'
 })
@@ -111,11 +112,23 @@ export class TicketCard {
   // pruefen muesste.
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('detailDialog');
 
+  // Ist das Detail-Popup gerade offen? Steuert im Template per @if, ob der
+  // Kommentarbereich (<app-ticket-comments>) ueberhaupt existiert.
+  //
+  // Warum der Aufwand? Das Dashboard erzeugt fuer JEDES Ticket eine eigene
+  // TicketCard. Wuerde jede Karte ihren Kommentarbereich (und damit dessen
+  // GET-Anfrage) sofort mit erzeugen, gingen bei 30 Tickets 30 Anfragen an den
+  // Server - obwohl der Nutzer vielleicht kein einziges Popup oeffnet. So
+  // entsteht TicketComments erst beim Oeffnen und laedt erst dann ("Lazy
+  // Loading", bedarfsgesteuertes Nachladen).
+  protected readonly isDetailOpen = signal(false);
+
   // showModal() ist eine eingebaute Methode JEDES <dialog>-Elements (kein
   // Angular-spezifisches API) - macht es sichtbar UND modal (Rest der Seite
   // per Tab-Taste nicht mehr erreichbar, ::backdrop erscheint automatisch).
   protected openDetails(): void {
     this.statusChangeError.set(null);
+    this.isDetailOpen.set(true);
     this.dialog().nativeElement.showModal();
   }
 
@@ -123,6 +136,18 @@ export class TicketCard {
   // aus und gibt die Bedienung des Rests der Seite frei.
   protected closeDetails(): void {
     this.dialog().nativeElement.close();
+  }
+
+  // Wird ueber (close)="onDialogClosed()" im Template aufgerufen. Das native
+  // "close"-Event feuert bei JEDER Art des Schliessens - ueber closeDetails()
+  // (X-Button, Klick daneben, nach Statuswechsel) UND ueber die Escape-Taste,
+  // die der Browser selbst behandelt, ohne dass unser Code davon etwas
+  // mitbekaeme. Deshalb wird isDetailOpen HIER zurueckgesetzt und nicht in
+  // closeDetails() - sonst wuerde "mit Escape geschlossen" als "noch offen"
+  // gelten, TicketComments bliebe bestehen und wuerde beim naechsten Oeffnen
+  // nicht frisch laden.
+  protected onDialogClosed(): void {
+    this.isDetailOpen.set(false);
   }
 
   // showModal() macht das <dialog> zwar modal, "Klick daneben schliessen" ist

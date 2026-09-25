@@ -6,6 +6,10 @@ from sqlalchemy import engine_from_config, pool
 from app.core.config import get_settings
 from app.core.database import Base
 # Modelle müssen importiert sein, damit Alembic sie über Base.metadata sieht.
+# Fehlt hier ein Model, haelt "alembic revision --autogenerate" dessen
+# Tabelle fuer ueberfluessig und schlaegt einen DROP TABLE vor - bei jedem
+# neuen Model also hier ergaenzen.
+from app.models.comment import Comment  # noqa: F401
 from app.models.ticket import Ticket  # noqa: F401
 from app.models.user import User  # noqa: F401
 

@@ -19,10 +19,11 @@ Warum welche Technologie gewählt wurde, wichtige Konzepte (Docker, Hashing, JWT
 - **Login-Flow steht** – Frontend loggt sich gegen das echte Backend ein, Session per HttpOnly-Cookie (kein Token im Frontend-JS lesbar), Route-Guard schützt das Dashboard
 - **Dashboard zeigt echte Daten** – Kennzahlen und die vier Status-Ansichten kommen live aus `GET /tickets`, nicht mehr aus Mock-Daten
 - **Ticket erstellen, Details ansehen & Status ändern über die Oberfläche** – `/tickets/new`, anklickbare Ticket-Karten öffnen ein Detail-Popup mit Beschreibung und passenden Aktions-Buttons (Claim/Lösen/Schließen/Ablehnen) – welche Buttons erscheinen, berechnet das Backend pro Rolle/Status, nicht das Frontend
-- **Frontend-Komponenten-/Service-Tests** – `Auth`, `authGuard`, `TicketCard`, `Dashboard`, mit gemocktem `HttpClient`, eigene CI-Pipeline
+- **Ticket-Kommentare** – `GET/POST /tickets/{id}/comments`, im Detail-Popup als chronologischer Verlauf mit Eingabefeld; wer ein Ticket nicht sehen darf, sieht auch dessen Kommentare nicht (gleiche Regel, zentral in `app/services/ticket_access.py`); Kommentare sind bewusst unveränderlich (Nachvollziehbarkeit)
+- **Frontend-Komponenten-/Service-Tests** – `Auth`, `authGuard`, `TicketCard`, `TicketComments`, `Dashboard`, mit gemocktem `HttpClient`, eigene CI-Pipeline
 - **Deployment vorbereitet** – produktionsfähige Konfiguration (konfigurierbare CORS-Origin/Cookie-Flags, Angular-Environments), VPS-Anleitung samt Betriebs-Skripten (`scripts/`)
 
-Nächste Schritte: Registrierungs-Seite im Frontend, echte HTTP-Integrationstests im Backend, VPS-Deployment tatsächlich durchführen.
+Nächste Schritte: Autorennamen bei Kommentaren anzeigen, Registrierungs-Seite im Frontend, echte HTTP-Integrationstests im Backend, VPS-Deployment tatsächlich durchführen.
 
 ## Backend lokal starten
 

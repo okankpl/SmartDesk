@@ -69,6 +69,7 @@ Funktionale Anforderungen beschreiben **konkretes Verhalten** des Systems ("das 
 | FA-7 | Ein Agent kann sich ein Ticket zuweisen bzw. zugewiesen bekommen | 🔶 Datenfeld (`assignee_id`) über generisches `PATCH /tickets/{id}` setzbar, kein eigener "claim"-Endpunkt |
 | FA-8 | Nur ein Admin darf ein Ticket final schließen | ✅ in `ALLOWED_TRANSITIONS` (`RESOLVED → CLOSED` nur für `ADMIN`) |
 | FA-9 | Das Dashboard zeigt Kennzahlen (offene Tickets, kritische Incidents, heute gelöst) | ✅ live aus `GET /tickets` berechnet (`dashboard.ts`) |
+| FA-10 | Wer ein Ticket sehen darf, kann es kommentieren und den Kommentarverlauf chronologisch einsehen | ✅ `GET/POST /tickets/{id}/comments` (`app/routers/comments.py`), Anzeige im Ticket-Detail-Popup |
 
 Diese Tabelle ist zugleich ein kleines Beispiel für Requirements-Tracing: jede Zeile lässt sich auf einen Commit oder eine Datei zurückführen – das ist genau das Prinzip, das professionelle RE-Werkzeuge (z.B. Jira, Azure DevOps mit verlinkten Work Items) automatisieren.
 
@@ -86,7 +87,7 @@ Nicht-funktionale Anforderungen (NFA) beschreiben **Qualitätseigenschaften** st
 | **Portabilität** | Die Entwicklungsumgebung muss auf jedem Rechner identisch reproduzierbar sein | Docker Compose |
 | **Konsistenz** | Ungültige Datenzustände (z.B. Ticket ohne existierenden Melder) dürfen nicht in der DB landen | Foreign Keys, DB-Enums, serverseitige Prüfungen |
 
-### 2.5 Zwei Anwendungsfälle (Use Cases) im klassischen Format
+### 2.5 Anwendungsfälle (Use Cases) im klassischen Format
 
 Ein Use Case beschreibt einen einzelnen, abgeschlossenen Ablauf aus Sicht eines Akteurs – ein in der Requirements-Engineering-Lehre verbreitetes Format (Akteur / Vorbedingung / Ablauf / Nachbedingung / Fehlerfälle):
 
@@ -103,6 +104,13 @@ Ein Use Case beschreibt einen einzelnen, abgeschlossenen Ablauf aus Sicht eines 
 - **Ablauf:** Nutzer sendet E-Mail + Passwort an `POST /auth/login`
 - **Nachbedingung:** Nutzer erhält einen signierten JWT, gültig 60 Minuten
 - **Fehlerfall:** E-Mail unbekannt ODER Passwort falsch → in **beiden** Fällen identischer `401 Unauthorized` (bewusste Anti-User-Enumeration-Entscheidung, siehe Abschnitt 6)
+
+**UC-3: Ticket kommentieren**
+- **Akteur:** Employee (nur beim eigenen Ticket), Agent oder Admin (bei jedem Ticket)
+- **Vorbedingung:** Nutzer ist eingeloggt und darf das Ticket sehen
+- **Ablauf:** Nutzer öffnet das Ticket-Detail-Popup, schreibt einen Text und sendet `POST /tickets/{id}/comments`
+- **Nachbedingung:** Der Kommentar steht am Ende des Verlaufs; `author_id` ist der eingeloggte Nutzer, `created_at` setzt die Datenbank
+- **Fehlerfälle:** leerer oder nur aus Leerzeichen bestehender Text → `422`; fremdes oder nicht existierendes Ticket → in **beiden** Fällen `404` (dieselbe Object-Level-Authorization-Regel wie bei `GET /tickets/{id}`, siehe Abschnitt 6)
 
 ### 2.6 Einordnung: Spezifikation vs. Architekturbeschreibung
 
@@ -167,7 +175,8 @@ Schema (app/schemas/)      → beschreibt, wie Ein-/Ausgabe-JSON aussehen darf (
 Model (app/models/)        → beschreibt die Datenbank-Tabelle (SQLAlchemy)
 Service (app/services/)    → Geschäftslogik, die mehr ist als simples Lesen/Schreiben
                               (z.B. app/services/ticket_lifecycle.py: prüft Status-Übergänge
-                              gegen Rollenregeln, bevor der Router überhaupt committet)
+                              gegen Rollenregeln, bevor der Router überhaupt committet;
+                              app/services/ticket_access.py: wer welches Ticket sehen darf)
 ```
 
 Grund für diese Trennung: jede Schicht hat genau eine Verantwortung – der Router weiß nichts über SQL, das Model weiß nichts über HTTP. Das macht jede Schicht einzeln verständlich und testbar, auch wenn das Projekt wächst.
@@ -200,7 +209,7 @@ sequenceDiagram
 
 ## 5. Wichtige Datenmodell-Entscheidungen
 
-Das folgende Klassendiagramm zeigt die beiden zentralen Entitäten und ihre Beziehung zueinander. `requester_id` und `assignee_id` sind beides Fremdschlüssel auf `User`, aber mit unterschiedlicher Multiplizität – jedes Ticket hat genau einen Melder, aber optional (0..1) einen Bearbeiter:
+Das folgende Klassendiagramm zeigt die zentralen Entitäten und ihre Beziehungen zueinander. `requester_id` und `assignee_id` sind beides Fremdschlüssel auf `User`, aber mit unterschiedlicher Multiplizität – jedes Ticket hat genau einen Melder, aber optional (0..1) einen Bearbeiter. Ein `Comment` gehört immer zu genau einem Ticket und genau einem Autor:
 
 ```mermaid
 classDiagram
@@ -223,6 +232,13 @@ classDiagram
         +datetime created_at
         +datetime resolved_at
         +datetime closed_at
+    }
+    class Comment {
+        +int id
+        +int ticket_id
+        +int author_id
+        +str body
+        +datetime created_at
     }
     class UserRole {
         <<enumeration>>
@@ -247,6 +263,8 @@ classDiagram
 
     Ticket "0..*" --> "1" User : requester_id
     Ticket "0..*" --> "0..1" User : assignee_id
+    Comment "0..*" --> "1" Ticket : ticket_id
+    Comment "0..*" --> "1" User : author_id
     User --> UserRole
     Ticket --> TicketStatus
     Ticket --> TicketPriority
@@ -275,6 +293,16 @@ stateDiagram-v2
 **Wie die Statuswechsel-Buttons im Frontend wissen, was gerade erlaubt ist:** [get_allowed_next_statuses](../backend/app/services/ticket_lifecycle.py) berechnet pro Ticket und eingeloggtem Nutzer, welche Übergänge JETZT erlaubt wären – dieselbe `ALLOWED_TRANSITIONS`-Tabelle wie oben, nur als Liste statt als Exception. Der Router hängt das Ergebnis als `allowed_transitions`-Feld an jede Ticket-Antwort (`_to_ticket_read` in `tickets.py`). Das Frontend zeigt dadurch nur Buttons, die auch wirklich funktionieren würden – bewusst **keine** zweite, im Frontend gepflegte Kopie der Regeln: zwei getrennte Quellen der Wahrheit für dieselbe Regel könnten auseinanderlaufen, genau wie es dem Feldnamen `full_name`/`fullName` schon einmal passiert ist (siehe Abschnitt 8).
 
 **Warum `requester_id` und `assignee_id` als zwei getrennte Felder?** Weil "wer hat's gemeldet" und "wer bearbeitet's gerade" unterschiedliche Dinge sind, die sich unabhängig voneinander ändern (ein Ticket kann den Bearbeiter wechseln, der Melder bleibt immer gleich).
+
+**Warum Kommentare als eigene Tabelle statt als Textfeld im Ticket?** Ein Ticket hat beliebig viele Kommentare (1:n-Beziehung), jeder mit eigenem Autor und Zeitstempel. Ein einzelnes, immer weiter verlängertes Textfeld im Ticket könnte weder Autor noch Zeitpunkt pro Beitrag sauber speichern und wäre bei gleichzeitigen Schreibzugriffen fehleranfällig (zwei Nutzer hängen gleichzeitig Text an, einer überschreibt den anderen). Die eigene Tabelle `comments` ([models/comment.py](../backend/app/models/comment.py)) ist die normalisierte Standardlösung.
+
+**Warum sind Kommentare unveränderlich (kein `updated_at`, kein `PATCH`/`DELETE`)?** Der Kommentarverlauf dokumentiert, wer wann was mitgeteilt hat – ähnlich einem Protokoll (Audit-Trail). Wären Kommentare nachträglich änderbar, ließe sich z.B. nicht mehr belegen, welche Information ein Agent zum Zeitpunkt einer Entscheidung hatte. Weniger Endpunkte bedeuten außerdem weniger Angriffsfläche und weniger Berechtigungsregeln. Falls Bearbeiten später doch gebraucht wird, wäre der saubere Weg eine Änderungshistorie bzw. Soft-Delete, nicht das Überschreiben.
+
+**Warum ein Index auf `comments.ticket_id`?** Die häufigste Abfrage ist "alle Kommentare zu Ticket X". Ohne Index müsste die Datenbank dafür bei jedem Aufruf die komplette Tabelle durchsuchen (Full Table Scan); mit Index springt sie direkt zu den passenden Zeilen. PostgreSQL legt für Fremdschlüssel – anders als für Primärschlüssel – **nicht** automatisch einen Index an, deshalb wird er in der Migration explizit erzeugt (`ix_comments_ticket_id`).
+
+**Warum sortiert nach `created_at` *und* `id`?** Haben zwei Kommentare exakt denselben Zeitstempel, ist ihre Reihenfolge laut SQL-Standard nicht festgelegt – die Datenbank darf gleichrangige Zeilen in beliebiger Reihenfolge liefern. Die `id` als zweites Sortierkriterium (Tie-Breaker) macht die Reihenfolge eindeutig, weil sie mit jedem `INSERT` steigt.
+
+**Warum die URL `/tickets/{id}/comments` (verschachtelte Ressource)?** Ein Kommentar ergibt fachlich nur im Kontext seines Tickets Sinn; die URL bildet diese Hierarchie ab. Die Endpunkte liegen trotzdem in einer eigenen Router-Datei ([comments.py](../backend/app/routers/comments.py)), getreu "eine Datei pro Ressource" (Abschnitt 4).
 
 ---
 
@@ -334,11 +362,13 @@ sequenceDiagram
 
 **Wichtige Unterscheidung:** Das ist **Authentifizierung** (ist der Nutzer überhaupt eingeloggt?), zusätzlich dazu **Autorisierung** (darf diese konkrete Rolle diese konkrete Aktion?) – umgesetzt über zwei verschiedene Mechanismen, je nach Frage:
 - **Ja/Nein-Berechtigung** (darf diese Rolle das überhaupt?) → `Depends(require_roles(...))` in `deps.py`, z.B. `DELETE /tickets/{id}` nur für `ADMIN`, `PATCH /tickets/{id}` nur für `AGENT`/`ADMIN`.
-- **Sichtbarkeits-/Objekt-Filterung** (welche Teilmenge darf diese Rolle sehen?) → Filterlogik direkt im Endpunkt, z.B. `GET /tickets` liefert `EMPLOYEE` nur die eigenen Tickets, `GET /tickets/{id}` gibt bei fremdem Ticket bewusst `404` statt `403` zurück (verhindert, dass sich die Existenz eines fremden Tickets überhaupt erkennen lässt – siehe **Object-Level Authorization** / IDOR-Vermeidung).
+- **Sichtbarkeits-/Objekt-Filterung** (welche Teilmenge darf diese Rolle sehen?) → z.B. `GET /tickets` liefert `EMPLOYEE` nur die eigenen Tickets, `GET /tickets/{id}` gibt bei fremdem Ticket bewusst `404` statt `403` zurück (verhindert, dass sich die Existenz eines fremden Tickets überhaupt erkennen lässt – siehe **Object-Level Authorization** / IDOR-Vermeidung).
+
+Die Regel "wer darf welches einzelne Ticket sehen" steht an genau einer Stelle: `get_visible_ticket_or_404` in [ticket_access.py](../backend/app/services/ticket_access.py). Sie wird von `GET /tickets/{id}` **und** von beiden Kommentar-Endpunkten verwendet – wer ein Ticket nicht sehen darf, darf auch dessen Kommentare weder lesen noch schreiben. Ursprünglich stand die Regel direkt in `get_ticket`; mit den Kommentar-Endpunkten wäre sie ein zweites Mal nötig geworden. Zwei Kopien derselben Sicherheitsregel sind riskant: wird eine später angepasst und die andere vergessen, entsteht unbemerkt eine Lücke. Deshalb wurde sie vorher in ein eigenes Service-Modul ausgelagert (Refactoring, siehe DRY in Abschnitt 7). Nur `GET /tickets` (Liste) filtert weiterhin selbst per SQL-`WHERE`: dort sollen fremde Tickets gar nicht erst aus der Datenbank geladen werden, statt sie erst zu laden und danach in Python auszusortieren.
 
 Für Status-Übergänge läuft die Rollenprüfung weiterhin separat in `ticket_lifecycle.py` (siehe Abschnitt 5), weil sie vom *aktuellen Status* abhängt, nicht nur von der Rolle allein.
 
-Eine zweite Konsequenz derselben Änderung: `POST /tickets` nimmt `requester_id` nicht mehr vom Client entgegen (das wäre seit es einen eingeloggten Nutzer gibt ein Sicherheitsloch – jeder hätte Tickets im Namen anderer anlegen können), sondern setzt es serverseitig aus `current_user.id`.
+Eine zweite Konsequenz derselben Änderung: `POST /tickets` nimmt `requester_id` nicht mehr vom Client entgegen (das wäre seit es einen eingeloggten Nutzer gibt ein Sicherheitsloch – jeder hätte Tickets im Namen anderer anlegen können), sondern setzt es serverseitig aus `current_user.id`. Dasselbe gilt für `author_id` bei `POST /tickets/{id}/comments`: das Eingabe-Schema `CommentCreate` enthält nur `body`, ein mitgeschicktes `author_id` wird ignoriert (Schutz vor **Mass Assignment**).
 
 ---
 
@@ -352,6 +382,7 @@ Dieser Abschnitt macht explizit, welche im Berufsleben verbreiteten Prinzipien i
 - `get_settings()` mit `@lru_cache` (`config.py`) – Umgebungsvariablen werden genau einmal eingelesen, nicht bei jedem Zugriff neu.
 - `STATUS_LABELS` (`ticket-card.ts`) – die deutschen Beschriftungen für Ticket-Status stehen an einer Stelle, nicht verstreut in jedem Template.
 - `viewTabs` (`dashboard.ts`) – eine einzige Datenquelle für Tab-Beschriftung, Filterlogik und Abschnittsüberschrift gleichzeitig, statt das dreimal separat zu pflegen.
+- `get_visible_ticket_or_404` (`ticket_access.py`) – eine Sichtbarkeitsregel für drei Endpunkte (Ticket-Detail, Kommentare lesen, Kommentar schreiben), siehe Abschnitt 6. Bei Sicherheitsregeln ist DRY besonders wichtig, weil eine vergessene Kopie nicht als Fehler auffällt, sondern als stille Lücke.
 
 **Dependency Injection** – ein Muster, bei dem eine Funktion ihre Abhängigkeiten (z.B. eine Datenbank-Session) von außen gereicht bekommt, statt sie selbst zu beschaffen. Umgesetzt über `db: Session = Depends(get_db)` in jedem Router. Macht Code testbar: `list_tickets(db: Session = Depends(get_db))` lässt sich in einem Test mit einer Test-Session aufrufen, ohne die echte Datenbank-Verbindungslogik nachzubauen.
 
@@ -383,7 +414,13 @@ Der Vorteil: `TicketCard` lässt sich isoliert wiederverwenden und testen, ohne 
 
 **Barrierefreiheit (Accessibility) von Anfang an mitgedacht** – `aria-label`, `role="tablist"`/`role="tab"`, `aria-selected` sind bereits im Code (`dashboard.html`, `main-layout.html`). Das ist keine nachträgliche Fleißaufgabe, sondern ein Qualitätsmerkmal, das in professionellen Frontend-Projekten regelmäßig explizit gefordert wird (Stichwort WCAG).
 
-**Komponenten-/Service-Tests mit gemocktem `HttpClient`** – `Auth`, `authGuard`, `TicketCard` und `Dashboard` haben jeweils eigene Tests (`*.spec.ts`), die `provideHttpClientTesting()` statt echter HTTP-Anfragen nutzen: `HttpTestingController` fängt eine ausgehende Anfrage ab (`httpMock.expectOne(url)`) und beantwortet sie kontrolliert (`.flush(daten)`) – dieselbe Idee wie die reinen Funktionen im Backend, nur für Angular-Code, der HTTP-Abhängigkeiten hat, die sich nicht einfach weglassen lassen. Ein Nebenfund beim Aufsetzen: jsdom (die DOM-Umgebung, in der die Tests laufen) implementiert die imperativen Methoden des `<dialog>`-Elements (`showModal()`/`close()`) nicht – ein bekanntes Tooling-Limit, kein Anwendungsfehler, behoben mit einem minimalen Prototyp-Polyfill nur in der Testumgebung.
+**Kommentarbereich als eigene Komponente, erzeugt erst beim Öffnen des Popups** – [TicketComments](../frontend/src/app/pages/dashboard/ticket-comments/ticket-comments.ts) enthält Kommentarliste und Eingabeformular und wird in `ticket-card.html` nur innerhalb von `@if (isDetailOpen())` gerendert. Zwei Gründe:
+- **Lazy Loading:** Das Dashboard erzeugt pro Ticket eine `TicketCard`. Würde jede Karte ihre Kommentare sofort laden, entstünde bei 30 Tickets 30 Anfragen, ohne dass ein Popup geöffnet wurde. Durch das `@if` existiert die Komponente (und damit ihre `resource()`-Anfrage) erst, wenn das Popup aufgeht. Beim Schließen zerstört Angular sie wieder, beim nächsten Öffnen wird frisch geladen. Das Schließen wird über das native `close`-Event des `<dialog>` erkannt, weil es bei *jeder* Art des Schließens feuert – auch per Escape-Taste, die der Browser selbst behandelt.
+- **Single Responsibility:** Zuerst lag der Kommentarbereich direkt in `TicketCard`. Der Produktions-Build meldete daraufhin eine überschrittene Stylesheet-Größe (`anyComponentStyle`-Budget in `angular.json`, 4 kB). Solche Budgets sind ein Frühwarnsignal dafür, dass eine Komponente zu viele Aufgaben übernimmt. Statt das Budget hochzusetzen, wurde der Kommentarbereich ausgelagert: `TicketCard` verantwortet Karte, Popup und Statuswechsel, `TicketComments` den Kommentarverlauf.
+
+Nach dem Senden hängt die Komponente den vom Server bestätigten Kommentar direkt an die Liste an (`resource.update(...)`), statt die ganze Liste neu zu laden. Das spart eine Anfrage und verhindert ein kurzes Aufflackern des Ladezustands. Nutzertext wird ausschließlich per Interpolation (`{{ comment.body }}`) ausgegeben, die Angular immer als reinen Text behandelt – nie per `[innerHTML]`. Das schützt vor Cross-Site-Scripting (XSS); ein eigener Test prüft, dass ein eingeschleustes `<img onerror=...>` als Text erscheint und kein Element erzeugt.
+
+**Komponenten-/Service-Tests mit gemocktem `HttpClient`** – `Auth`, `authGuard`, `TicketCard`, `TicketComments` und `Dashboard` haben jeweils eigene Tests (`*.spec.ts`), die `provideHttpClientTesting()` statt echter HTTP-Anfragen nutzen: `HttpTestingController` fängt eine ausgehende Anfrage ab (`httpMock.expectOne(url)`) und beantwortet sie kontrolliert (`.flush(daten)`) – dieselbe Idee wie die reinen Funktionen im Backend, nur für Angular-Code, der HTTP-Abhängigkeiten hat, die sich nicht einfach weglassen lassen. Ein Nebenfund beim Aufsetzen: jsdom (die DOM-Umgebung, in der die Tests laufen) implementiert die imperativen Methoden des `<dialog>`-Elements (`showModal()`/`close()`) nicht – ein bekanntes Tooling-Limit, kein Anwendungsfehler, behoben mit einem minimalen Prototyp-Polyfill nur in der Testumgebung.
 
 **Zentraler HTTP-Interceptor statt Wiederholung pro Aufruf** – [credentialsInterceptor](../frontend/src/app/core/credentials-interceptor.ts) hängt `withCredentials: true` an jede ausgehende Anfrage, damit der Auth-Cookie mitgeschickt wird. Eine Angular-Dependency-Injection-Variante desselben DRY-Gedankens wie `Depends(get_db)` im Backend: die einzelnen HTTP-Aufrufe (`Auth.login`, spätere Ticket-Aufrufe) müssen sich um diesen Aspekt nicht mehr einzeln kümmern.
 
@@ -408,8 +445,11 @@ Ehrlich zu benennen, was fehlt, ist selbst ein Qualitätsmerkmal. Hier die aktue
 | `GET /tickets`, `GET /users` liefern immer die komplette (bzw. rollen-gefilterte) Liste ohne Paginierung | Für die aktuelle, kleine Testdatenmenge unkritisch | Pagination (`?limit=20&offset=0`), Standard bei jeder wachsenden REST-API |
 | ~~CORS/Cookie-Flags/Frontend-`API_URL` fest auf `localhost`~~ | – | erledigt: `FRONTEND_ORIGIN`/`COOKIE_SECURE` als Backend-Settings, Angular-`environment.ts`/`environment.prod.ts` – siehe [Deployment-Anleitung](deployment.md) |
 | Keine Registrierungs-Seite im Frontend | Bewusst zurückgestellt, um den Login-Flow zuerst fertig zu bekommen | Formular analog zu `login.ts`, ruft `POST /auth/register` auf |
+| Kommentare zeigen nur die Autor-ID ("Nutzer #3"), nur eigene Kommentare erscheinen als "Du" | `CommentRead` liefert bisher nur `author_id`; der Name steht in einer anderen Tabelle | Im Backend per SQL-`JOIN` auf `users` den Namen mitladen und als `author_name` in `CommentRead` ausliefern – ein `JOIN` für die ganze Liste statt einer Einzelabfrage pro Kommentar (vermeidet das sogenannte N+1-Problem) |
+| Kommentieren ist auch bei geschlossenen Tickets möglich | Fachlich noch nicht entschieden – in vielen ITSM-Tools ist ein geschlossenes Ticket schreibgeschützt | Prüfung in `create_comment` (z.B. `409 Conflict` bei `CLOSED`) plus ausgeblendetes Formular im Frontend |
+| Neue Kommentare anderer erscheinen erst beim erneuten Öffnen des Popups | Für den aktuellen Umfang ausreichend, jede Echtzeit-Lösung bringt eigene Infrastruktur mit | periodisches Nachladen (Polling) oder serverseitige Push-Mechanismen (Server-Sent Events, WebSockets) |
 | Kein Bearbeiten von Titel/Beschreibung/Priorität/Zuweisung über die UI (Erstellen und Statuswechsel gehen bereits) | `PATCH /tickets/{id}` existiert bereits im Backend, UI-Anbindung fehlt noch | Formular analog zu `/tickets/new`, vorausgefüllt mit den aktuellen Werten |
-| Noch keine echten HTTP-Integrationstests (nur reine Unit-Tests für `security.py`/`ticket_lifecycle.py`) | Bisheriger Testfokus lag bewusst auf isolierter, ohne DB testbarer Logik | FastAPIs `TestClient` + eine Test-Datenbank (z.B. SQLite in-memory oder ein Test-Postgres-Container in der CI) |
+| Noch keine echten HTTP-Integrationstests (nur reine Unit-Tests für `security.py`, `ticket_lifecycle.py`, `ticket_access.py` und die Kommentar-Schemas) | Bisheriger Testfokus lag bewusst auf isolierter, ohne DB testbarer Logik | FastAPIs `TestClient` + eine Test-Datenbank (z.B. SQLite in-memory oder ein Test-Postgres-Container in der CI) |
 | `requirements.txt` pinnt nur Untergrenzen (`fastapi>=0.115`), keine exakten Versionen | Beim Projektstart bewusst einfach gehalten | für reproduzierbare Installationen exakte Versionen pinnen (`==`) oder ein Lockfile-Tool wie `pip-compile`/`uv` einsetzen – ein frischer `pip install` kann sonst Monate später eine deutlich neuere, potenziell inkompatible Version ziehen (bei einer lokalen Testinstallation im August 2026 beobachtet: FastAPI 0.141 statt der beim Projektstart verwendeten Version) |
 
 ---
@@ -424,8 +464,9 @@ Ehrlich zu benennen, was fehlt, ist selbst ein Qualitätsmerkmal. Hier die aktue
 6. ~~Dashboard an `GET /tickets` anbinden~~ – erledigt: `TicketsService` + `resource()`, 4 Status-Tabs, Kennzahlen live berechnet
 7. ~~Ticket erstellen über die UI, Ticket-Detailansicht~~ – erledigt: `/tickets/new`, klickbare Ticket-Karten öffnen ein Detail-Popup (natives `<dialog>`) mit Beschreibung
 8. ~~Status ändern über die UI~~ – erledigt: Backend berechnet `allowed_transitions` pro Ticket/Nutzer, Frontend zeigt nur passende Buttons (Claim/Lösen/Schließen/Ablehnen)
-9. Registrierungs-Seite im Frontend
-10. ~~Frontend-Komponenten-/Service-Tests~~ – erledigt: `Auth`, `authGuard`, `TicketCard`, `Dashboard`, eigene CI-Pipeline (`frontend-tests.yml`). Backend: weiterhin nur Unit-Tests – echte HTTP-Integrationstests (`TestClient` + Test-Datenbank) noch offen
-11. Politur, Deployment-Feinschliff
+9. ~~Ticket-Kommentare~~ – erledigt: `comments`-Tabelle + Migration, `GET/POST /tickets/{id}/comments` mit derselben Sichtbarkeitsregel wie das Ticket (`ticket_access.py`), Kommentarverlauf + Eingabeformular im Detail-Popup (`TicketComments`)
+10. Registrierungs-Seite im Frontend
+11. ~~Frontend-Komponenten-/Service-Tests~~ – erledigt: `Auth`, `authGuard`, `TicketCard`, `TicketComments`, `Dashboard`, eigene CI-Pipeline (`frontend-tests.yml`). Backend: weiterhin nur Unit-Tests – echte HTTP-Integrationstests (`TestClient` + Test-Datenbank) noch offen
+12. Politur, Deployment-Feinschliff
 
 Ausführlicher Phasenplan: siehe die Commit-Historie (`git log`) – jeder Phasen-Commit beschreibt, was dazukam und warum.
