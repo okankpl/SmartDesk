@@ -7,6 +7,7 @@ from app.core.deps import get_current_user, require_roles
 from app.models.ticket import Ticket
 from app.models.user import User, UserRole
 from app.schemas.ticket import TicketCreate, TicketRead, TicketStatusUpdate, TicketUpdate
+from app.services.ticket_access import get_visible_ticket_or_404
 from app.services.ticket_lifecycle import apply_status_transition, get_allowed_next_statuses
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
@@ -70,14 +71,11 @@ def create_ticket(
 def get_ticket(
     ticket_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
 ) -> TicketRead:
-    ticket = db.get(Ticket, ticket_id)
     # Dieselbe Sichtbarkeitsregel wie list_tickets, hier als "gehoert das
-    # Ticket ueberhaupt zu mir"-Check statt als Filter. Bewusst derselbe 404
-    # wie "existiert nicht" statt 403 "verboten": ein fremdes Ticket soll fuer
-    # einen Employee nicht mal als existent erkennbar sein (Object-Level
-    # Authorization / IDOR-Vermeidung, siehe Lernnotizen "Mass Assignment").
-    if ticket is None or (current_user.role == UserRole.EMPLOYEE and ticket.requester_id != current_user.id):
-        raise HTTPException(status_code=404, detail="Ticket nicht gefunden")
+    # Ticket ueberhaupt zu mir"-Check statt als Filter - ausgelagert nach
+    # services/ticket_access.py, weil comments.py exakt dieselbe Pruefung
+    # braucht (siehe Kommentar dort).
+    ticket = get_visible_ticket_or_404(db.get(Ticket, ticket_id), current_user)
     return _to_ticket_read(ticket, current_user)
 
 
