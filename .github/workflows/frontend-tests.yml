@@ -1,0 +1,49 @@
+name: Frontend Tests
+
+# Eigene Workflow-Datei statt eines zweiten Jobs in backend-tests.yml - beide
+# laufen unabhaengig voneinander (ein kaputter Frontend-Test blockiert nicht
+# den Backend-Job und umgekehrt), gleiches Prinzip wie die Trennung der
+# beiden Anwendungen selbst (siehe docs/architektur-und-konzepte.md,
+# Abschnitt 1: Client-Server-Architektur).
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    # Alle "run"-Schritte starten automatisch im frontend/-Ordner, gleiches
+    # Prinzip wie "working-directory: backend" in backend-tests.yml.
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node installieren
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          # Cached node_modules zwischen CI-Laeufen (ueber den Inhalt von
+          # package-lock.json identifiziert) - macht spaetere Laeufe
+          # deutlich schneller, weil npm ci nicht jedes Mal alles neu
+          # herunterladen muss.
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      # npm ci statt npm install: installiert EXAKT die in package-lock.json
+      # fixierten Versionen und bricht ab, falls package.json und
+      # package-lock.json nicht zueinander passen - reproduzierbarer als
+      # npm install, das Lockfile-Versionen bei Bedarf stillschweigend
+      # aktualisieren wuerde. Genau die Art von Versions-Ungenauigkeit, die
+      # beim Backend (requirements.txt ohne exakte Versionen) als bewusste
+      # Einschraenkung dokumentiert ist - beim Frontend dank package-lock.json
+      # von Anfang an sauber geloest.
+      - name: Abhaengigkeiten installieren
+        run: npm ci
+
+      - name: Tests ausfuehren
+        run: npx ng test

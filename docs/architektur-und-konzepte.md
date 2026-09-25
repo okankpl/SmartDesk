@@ -82,7 +82,7 @@ Nicht-funktionale Anforderungen (NFA) beschreiben **Qualitätseigenschaften** st
 | **Sicherheit** | Zugriff muss nachweisbar an einen Nutzer gebunden sein | JWT mit `sub`/`role`/`exp` |
 | **Wartbarkeit** | Code muss von anderen Entwicklern verstanden und erweitert werden können | Schichtenarchitektur ([Abschnitt 4](#4-aufbau-des-backends-die-vier-schichten)), durchgängige Kommentare |
 | **Nachvollziehbarkeit** | Datenbank-Änderungen müssen versioniert und rückgängig machbar sein | Alembic-Migrationen |
-| **Testbarkeit** | Kernlogik muss automatisiert geprüft werden können, ohne die ganze App zu starten | reine Funktionen in `security.py`/`ticket_lifecycle.py` + pytest + CI |
+| **Testbarkeit** | Kernlogik muss automatisiert geprüft werden können, ohne die ganze App zu starten | Backend: reine Funktionen in `security.py`/`ticket_lifecycle.py` + pytest + CI. Frontend: Komponenten-/Service-Tests mit gemocktem `HttpClient` (Vitest) + CI |
 | **Portabilität** | Die Entwicklungsumgebung muss auf jedem Rechner identisch reproduzierbar sein | Docker Compose |
 | **Konsistenz** | Ungültige Datenzustände (z.B. Ticket ohne existierenden Melder) dürfen nicht in der DB landen | Foreign Keys, DB-Enums, serverseitige Prüfungen |
 
@@ -383,6 +383,8 @@ Der Vorteil: `TicketCard` lässt sich isoliert wiederverwenden und testen, ohne 
 
 **Barrierefreiheit (Accessibility) von Anfang an mitgedacht** – `aria-label`, `role="tablist"`/`role="tab"`, `aria-selected` sind bereits im Code (`dashboard.html`, `main-layout.html`). Das ist keine nachträgliche Fleißaufgabe, sondern ein Qualitätsmerkmal, das in professionellen Frontend-Projekten regelmäßig explizit gefordert wird (Stichwort WCAG).
 
+**Komponenten-/Service-Tests mit gemocktem `HttpClient`** – `Auth`, `authGuard`, `TicketCard` und `Dashboard` haben jeweils eigene Tests (`*.spec.ts`), die `provideHttpClientTesting()` statt echter HTTP-Anfragen nutzen: `HttpTestingController` fängt eine ausgehende Anfrage ab (`httpMock.expectOne(url)`) und beantwortet sie kontrolliert (`.flush(daten)`) – dieselbe Idee wie die reinen Funktionen im Backend, nur für Angular-Code, der HTTP-Abhängigkeiten hat, die sich nicht einfach weglassen lassen. Ein Nebenfund beim Aufsetzen: jsdom (die DOM-Umgebung, in der die Tests laufen) implementiert die imperativen Methoden des `<dialog>`-Elements (`showModal()`/`close()`) nicht – ein bekanntes Tooling-Limit, kein Anwendungsfehler, behoben mit einem minimalen Prototyp-Polyfill nur in der Testumgebung.
+
 **Zentraler HTTP-Interceptor statt Wiederholung pro Aufruf** – [credentialsInterceptor](../frontend/src/app/core/credentials-interceptor.ts) hängt `withCredentials: true` an jede ausgehende Anfrage, damit der Auth-Cookie mitgeschickt wird. Eine Angular-Dependency-Injection-Variante desselben DRY-Gedankens wie `Depends(get_db)` im Backend: die einzelnen HTTP-Aufrufe (`Auth.login`, spätere Ticket-Aufrufe) müssen sich um diesen Aspekt nicht mehr einzeln kümmern.
 
 **`resource()` statt manuellem Lade-/Fehler-Zustand** – [dashboard.ts](../frontend/src/app/pages/dashboard/dashboard.ts) lädt Tickets über Angulars `resource()`-API statt eines simplen `http.get(...).subscribe(...)`. Der Unterschied: `resource()` liefert Lade- und Fehlerzustand (`isLoading()`, `error()`) automatisch als Signals mit, die sonst von Hand als zusätzliche Signals nachgebaut werden müssten. Das Template kann so direkt zwischen "lädt gerade", "Fehler" und "fertig geladen" unterscheiden (siehe `dashboard.html`), ohne eigene Zustandsverwaltung dafür.
@@ -423,7 +425,7 @@ Ehrlich zu benennen, was fehlt, ist selbst ein Qualitätsmerkmal. Hier die aktue
 7. ~~Ticket erstellen über die UI, Ticket-Detailansicht~~ – erledigt: `/tickets/new`, klickbare Ticket-Karten öffnen ein Detail-Popup (natives `<dialog>`) mit Beschreibung
 8. ~~Status ändern über die UI~~ – erledigt: Backend berechnet `allowed_transitions` pro Ticket/Nutzer, Frontend zeigt nur passende Buttons (Claim/Lösen/Schließen/Ablehnen)
 9. Registrierungs-Seite im Frontend
-10. Weitere Tests (HTTP-Integrationstests, Auth-Endpunkte), CI um eine Test-Datenbank erweitern
+10. ~~Frontend-Komponenten-/Service-Tests~~ – erledigt: `Auth`, `authGuard`, `TicketCard`, `Dashboard`, eigene CI-Pipeline (`frontend-tests.yml`). Backend: weiterhin nur Unit-Tests – echte HTTP-Integrationstests (`TestClient` + Test-Datenbank) noch offen
 11. Politur, Deployment-Feinschliff
 
 Ausführlicher Phasenplan: siehe die Commit-Historie (`git log`) – jeder Phasen-Commit beschreibt, was dazukam und warum.
