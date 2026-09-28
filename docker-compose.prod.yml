@@ -37,7 +37,13 @@ services:
     # reiner Entwicklungs-Komfort: Uvicorn beobachtet dabei staendig
     # Datei-Aenderungen und startet bei jeder Aenderung neu - unnoetiger
     # Overhead, wenn sich der Code eh nicht mehr live aendert).
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    # --root-path /api: Caddy schneidet das "/api"-Praefix ab, bevor die Anfrage
+    # hier ankommt (handle_path im Caddyfile) - das Backend weiss also nicht,
+    # dass es von aussen unter /api erreichbar ist. Das Routing stoert das
+    # nicht, wohl aber alle URLs, die das Backend selbst erzeugt: die Swagger
+    # UI (/api/docs) laedt ihre API-Beschreibung sonst von /openapi.json statt
+    # /api/openapi.json - die Anfrage landet beim Frontend, Swagger bleibt leer.
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --root-path /api
 
   caddy:
     image: caddy:2-alpine

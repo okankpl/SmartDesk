@@ -8,17 +8,63 @@
 # nicht fest im Code/Git, sondern nur in der (nicht eingecheckten) .env auf
 # dem Server.
 {$DOMAIN} {
+	# Sicherheits-Header fuer JEDE Antwort (Frontend-Dateien und API). Sie
+	# sagen dem Browser, welche Schutzmechanismen er aktivieren soll - eine
+	# zusaetzliche Verteidigungslinie, falls im Code doch einmal eine Luecke
+	# steckt ("Defense in Depth").
+	header {
+		# HSTS: der Browser merkt sich ein Jahr lang, diese Domain NUR per
+		# HTTPS aufzurufen - auch wenn jemand http:// eintippt oder ein
+		# Angreifer im WLAN versucht, die Verbindung auf HTTP herunterzustufen.
+		Strict-Transport-Security "max-age=31536000"
+		# Browser soll den Dateityp nicht "erraten" (z.B. eine Textdatei als
+		# Skript ausfuehren), sondern dem mitgeschickten Content-Type glauben.
+		X-Content-Type-Options "nosniff"
+		# Die Seite darf nicht in einem <iframe> auf fremden Seiten eingebettet
+		# werden - Schutz vor Clickjacking (unsichtbar ueberlagerte Buttons).
+		X-Frame-Options "DENY"
+		# Beim Klick auf externe Links wird nur die Domain, nicht der volle
+		# Pfad (z.B. /tickets/42) als Herkunft mitgeschickt.
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# "-" entfernt einen Header: Caddy verraet sonst per "Server: Caddy",
+		# welche Software laeuft - erleichtert Angreifern die Suche nach
+		# passenden bekannten Luecken.
+		-Server
+	}
+
 	# Alles unter /api/* geht ans Backend. handle_path (statt handle) schneidet
 	# das "/api"-Praefix VOR der Weiterleitung ab - das Backend selbst kennt
 	# gar kein "/api", seine Routen bleiben unveraendert (/tickets, /auth/login, ...).
+	# Damit vom Backend erzeugte URLs (z.B. in der Swagger UI) trotzdem stimmen,
+	# startet es mit --root-path /api (siehe docker-compose.prod.yml).
 	# "backend" ist der Servicename aus docker-compose.prod.yml, wie schon beim
 	# Postgres-Hostnamen im Backend selbst.
 	handle_path /api/* {
+		# Obergrenze fuer die Groesse eines Request-Bodys: ohne sie koennte
+		# jemand beliebig grosse Anfragen schicken und Speicher/CPU des Servers
+		# belasten. 1 MB ist fuer Tickets/Kommentare (reiner Text, maximal
+		# 10.000 Zeichen) weit mehr als genug.
+		request_body {
+			max_size 1MB
+		}
 		reverse_proxy backend:8000
 	}
 
 	# Alles andere: die gebaute Angular-App als statische Dateien ausliefern.
 	handle {
+		# Content-Security-Policy: Whitelist, woher der Browser Skripte,
+		# Styles, Bilder usw. laden darf - alles nur von der eigenen Domain
+		# ('self'). Schafft es ein Angreifer trotz Angulars Schutz, HTML in
+		# die Seite zu schmuggeln, wuerde ein eingeschleustes <script> oder ein
+		# Nachladen von einer fremden Domain trotzdem blockiert.
+		# style-src 'unsafe-inline' ist noetig, weil Angular die Styles der
+		# einzelnen Komponenten zur Laufzeit als <style>-Elemente einfuegt.
+		# Skripte bleiben streng: kein 'unsafe-inline', kein eval.
+		# Nur hier im Frontend-Block, nicht fuer /api/*: die Swagger UI unter
+		# /api/docs laedt ihre Skripte von einem CDN und wuerde sonst blockiert,
+		# und fuer reine JSON-Antworten hat eine CSP keine Wirkung.
+		header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+
 		root * /srv/frontend
 		# try_files {path} /index.html: existiert der angefragte Pfad nicht als
 		# echte Datei (z.B. /dashboard - das ist keine Datei, sondern eine

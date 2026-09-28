@@ -7,8 +7,13 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    # "127.0.0.1:" davor: Port nur auf dem eigenen Rechner erreichbar. Ohne
+    # diese Angabe oeffnet Docker ihn auf ALLEN Netzwerkschnittstellen - im
+    # selben WLAN (Uni, Cafe) koennte dann jeder die Datenbank mit dem
+    # Standard-Passwort aus .env.example erreichen. Docker umgeht dabei unter
+    # Umstaenden sogar die Firewall des Betriebssystems.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -24,7 +29,7 @@ services:
       - ./backend/app:/app/app
       - ./backend/alembic:/app/alembic
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
