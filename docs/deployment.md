@@ -136,6 +136,24 @@ curl -sI https://<domain>/ | grep -iE "strict-transport|content-security|x-frame
 
 Alle vier Header müssen erscheinen. Fehlen sie, läuft vermutlich noch ein Caddy-Container mit altem `Caddyfile` – `docker compose -f docker-compose.prod.yml restart caddy`.
 
+## Produktions-Setup vorab lokal testen
+
+Die komplette Produktions-Konfiguration (Caddy, Sicherheits-Header, `--root-path`, Container ohne root) lässt sich vor dem Deployment auf dem eigenen Rechner prüfen – als **separates Compose-Projekt** (`-p`), damit eigene Container und Volumes entstehen und die lokale Entwicklungsumgebung unberührt bleibt. Caddy stellt für `localhost` automatisch ein selbstsigniertes Zertifikat aus (Browser-Warnung ist hier erwartet, `curl` braucht `-k`):
+
+```bash
+cd frontend && npx ng build && cd ..        # Frontend-Build fuer Caddy
+DOMAIN=localhost docker compose -p smartdesk-prodtest -f docker-compose.prod.yml up -d --build
+docker compose -p smartdesk-prodtest -f docker-compose.prod.yml exec backend alembic upgrade head
+
+curl -k https://localhost/api/health                     # {"status":"ok"}
+curl -skI https://localhost/ | grep -i content-security  # CSP vorhanden
+
+# Aufraeumen - -v entfernt nur die Volumes DIESES Test-Projekts
+DOMAIN=localhost docker compose -p smartdesk-prodtest -f docker-compose.prod.yml down -v
+```
+
+Unter Windows/PowerShell statt `DOMAIN=localhost ...` vorher `$env:DOMAIN = "localhost"` setzen. Voraussetzung: Ports 80 und 443 sind lokal frei.
+
 ## Troubleshooting
 
 | Symptom | Wahrscheinliche Ursache |

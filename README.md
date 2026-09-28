@@ -47,7 +47,7 @@ npm install
 npm start
 ```
 
-Läuft danach unter http://localhost:4200. Es gibt noch keine Registrierungs-Seite im Frontend – einen Test-Account vorher über die Swagger UI anlegen (`POST /auth/register` unter http://localhost:8000/docs), dann damit auf http://localhost:4200/login einloggen.
+Läuft danach unter http://localhost:4200. Es gibt noch keine Registrierungs-Seite im Frontend – einen Test-Account vorher über die Swagger UI anlegen (`POST /auth/register` unter http://localhost:8000/docs), dann damit auf http://localhost:4200/login einloggen. Für Test-Adressen eine Domain wie `@example.com` verwenden: reservierte Endungen wie `.local` oder `.test` lehnt die E-Mail-Prüfung ab, weil sie keine echten E-Mails empfangen können (Passwort: mindestens 8 Zeichen).
 
 ## Tests ausführen
 
@@ -67,9 +67,11 @@ Beide laufen automatisch bei jedem Push/PR auf `main` über GitHub Actions (`.gi
 Migrationen laufen im `backend`-Container:
 
 ```bash
-docker compose exec backend alembic revision --autogenerate -m "beschreibung"
+docker compose exec -u root backend alembic revision --autogenerate -m "beschreibung"
 docker compose exec backend alembic upgrade head
 ```
+
+`-u root` nur beim Erzeugen einer neuen Migration: der Backend-Container läuft sonst als eingeschränkter Benutzer ohne Schreibrechte auf den Quellcode (siehe `backend/Dockerfile`). Eine generierte Migration vor dem `upgrade` immer durchlesen – Autogenerate erkennt nicht alles (z.B. Umbenennungen) und kann unbenannte Constraints nicht gezielt löschen.
 
 ## Deployment
 
