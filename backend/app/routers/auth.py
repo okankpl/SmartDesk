@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -9,6 +9,7 @@ from app.core.deps import get_current_user
 from app.core.security import (
     ACCESS_TOKEN_COOKIE_NAME,
     ACCESS_TOKEN_EXPIRE_MINUTES,
+    DUMMY_PASSWORD_HASH,
     create_access_token,
     hash_password,
     verify_password,
@@ -22,13 +23,25 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> User:
-    """Legt einen neuen Nutzer an. Rolle ist IMMER EMPLOYEE, siehe RegisterRequest."""
-    existing_user = db.execute(select(User).where(User.email == payload.email)).scalar_one_or_none()
+    """Legt einen neuen Nutzer an. Rolle ist IMMER EMPLOYEE, siehe RegisterRequest.
+
+    Der 409 bei bereits vergebener E-Mail verraet, dass es diese E-Mail gibt -
+    ein bewusst in Kauf genommener Kompromiss (siehe Architektur-Doku,
+    Abschnitt 9): ihn zu vermeiden, braeuchte eine Bestaetigungs-E-Mail statt
+    einer direkten Antwort.
+    """
+    # payload.email ist schon kleingeschrieben (siehe RegisterRequest). func.lower
+    # auf der DB-Seite erfasst zusaetzlich aeltere Eintraege, die noch mit
+    # Grossbuchstaben gespeichert wurden - sonst liessen sich "Max@firma.de" und
+    # "max@firma.de" als zwei getrennte Accounts registrieren.
+    existing_user = db.execute(
+        select(User).where(func.lower(User.email) == payload.email)
+    ).scalar_one_or_none()
     if existing_user is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email bereits registriert")
 
     user = User(
-        email=payload.email,
+        email=payload.email,  # bereits normalisiert (kleingeschrieben, ohne Leerzeichen)
         hashed_password=hash_password(payload.password),
         full_name=payload.full_name,
         # Fest verdrahtet, NICHT aus payload - siehe Docstring/RegisterRequest.
@@ -53,13 +66,28 @@ def login(
     Angular-Frontend). Das Frontend soll den Token aus dem JSON-Body bewusst
     NIE selbst speichern - siehe docs/architektur-und-konzepte.md, Abschnitt 6.
     """
-    user = db.execute(select(User).where(User.email == form_data.username)).scalar_one_or_none()
+    # .strip().lower(): gleiche Normalisierung wie bei der Registrierung, damit
+    # "Max@Firma.de " denselben Account findet wie "max@firma.de".
+    email = form_data.username.strip().lower()
+    user = db.execute(select(User).where(func.lower(User.email) == email)).scalar_one_or_none()
 
     # Bewusst DIESELBE Fehlermeldung fuer "User existiert nicht" UND "Passwort falsch" -
     # sonst koennte ein Angreifer per unterschiedlicher Fehlermeldung rausfinden,
     # welche Emails ueberhaupt registriert sind.
-    if user is None or not verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Ungueltige Anmeldedaten")
+    invalid_credentials = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Ungueltige Anmeldedaten")
+
+    if user is None:
+        # Gleiche Meldung allein reicht nicht: bcrypt ist absichtlich langsam
+        # (Zehntelsekunden). Ohne diese Zeile kaeme die Antwort bei einer
+        # UNBEKANNTEN E-Mail messbar schneller als bei einer bekannten mit
+        # falschem Passwort - ein Angreifer koennte registrierte E-Mails also
+        # einfach per Stoppuhr erkennen ("Timing-Angriff"). Ein Vergleich gegen
+        # einen Dummy-Hash kostet genauso viel Zeit wie ein echter Vergleich.
+        verify_password(form_data.password, DUMMY_PASSWORD_HASH)
+        raise invalid_credentials
+
+    if not verify_password(form_data.password, user.hashed_password):
+        raise invalid_credentials
 
     token = create_access_token(user_id=user.id, role=user.role)
 

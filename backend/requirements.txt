@@ -9,6 +9,9 @@ pyjwt>=2.9
 # Wird von FastAPIs OAuth2PasswordRequestForm gebraucht (Login-Formular-Daten,
 # nicht JSON), nicht direkt in unserem Code importiert.
 python-multipart>=0.0.12
+# Wird von Pydantics EmailStr gebraucht (E-Mail-Format-Pruefung in
+# schemas/auth.py), nicht direkt importiert.
+email-validator>=2.1
 
 # Nur zum Testen benoetigt, laeuft nie im echten Betrieb mit
 pytest>=8.0

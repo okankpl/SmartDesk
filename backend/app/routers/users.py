@@ -3,15 +3,24 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.models.user import User
+from app.core.deps import require_roles
+from app.models.user import User, UserRole
 from app.schemas.user import UserRead
 
-router = APIRouter(prefix="/users", tags=["users"])
+# dependencies=[...] auf dem ganzen Router: gilt fuer JEDEN Endpunkt darin,
+# ohne dass man es an jede einzelne Funktion schreiben muss (und dabei einen
+# vergessen kann). Vorher hatte dieser Router GAR KEINE Pruefung - jeder,
+# auch ohne Login, konnte E-Mail, Name und Rolle aller Nutzer abrufen.
+# AGENT/ADMIN brauchen die Liste z.B. fuer die Zuweisung von Tickets; ein
+# EMPLOYEE braucht kein Nutzerverzeichnis (die eigenen Daten liefert /auth/me).
+router = APIRouter(
+    prefix="/users",
+    tags=["users"],
+    dependencies=[Depends(require_roles(UserRole.AGENT, UserRole.ADMIN))],
+)
 
-# Noch KEIN POST /users hier: Nutzer ohne echtes Passwort-Hashing anzulegen waere ein
-# unsicherer Workaround, der in Phase 3 (Auth) sofort wieder ersetzt wuerde. Bis dahin
-# werden Test-User direkt per SQL angelegt (siehe Migration/README) - dieser Router ist
-# nur zum Lesen da, um die Ticket<->User-Verknuepfung ueberhaupt pruefen zu koennen.
+# Kein POST /users: neue Nutzer entstehen ausschliesslich ueber
+# POST /auth/register (mit Passwort-Hashing und fest verdrahteter Rolle).
 
 
 @router.get("", response_model=list[UserRead])

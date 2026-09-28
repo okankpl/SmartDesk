@@ -2,10 +2,21 @@
 # lru_cache ist ein Decorator, der Funktionsergebnisse zwischenspeichert (Cache).
 from functools import lru_cache
 
+from pydantic import field_validator
+
 # pydantic_settings ist ein externes Package (steht in requirements.txt).
 # Aus ihm importieren wir zwei Namen: die Klasse BaseSettings und die Klasse
 # SettingsConfigDict. Mehrere Importe aus demselben Modul trennt man mit Komma.
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Der Platzhalter aus .env.example - steht oeffentlich im Git-Repository.
+# Wird er versehentlich unveraendert uebernommen, kann JEDER, der das Repo
+# kennt, gueltige JWTs fuer beliebige Nutzer (auch Admins) selbst signieren.
+SECRET_KEY_PLACEHOLDER = "change-me-to-a-random-value"
+# 32 Zeichen = Untergrenze, ab der PyJWT fuer HS256 nicht mehr warnt (RFC 7518
+# verlangt einen Schluessel mindestens so lang wie der Hash, also 256 Bit).
+# secrets.token_hex(32) erzeugt 64 Zeichen und liegt damit sicher darueber.
+SECRET_KEY_MIN_LENGTH = 32
 
 
 # "class Settings(BaseSettings):" - Settings ERBT von BaseSettings (wie "extends" in TS).
@@ -41,6 +52,20 @@ class Settings(BaseSettings):
     # Produktion MUSS das True sein, sonst schuetzt HttpOnly allein nicht vor
     # einem Angreifer, der den Netzwerkverkehr mitliest.
     cookie_secure: bool = False
+
+    # "Fail Fast" beim Start: lieber startet das Backend gar nicht (mit
+    # klarer Fehlermeldung), als dass es mit einem erratbaren Schluessel
+    # laeuft - das faellt sonst niemandem auf, bis jemand Tokens faelscht.
+    @field_validator("secret_key")
+    @classmethod
+    def secret_key_must_be_strong(cls, value: str) -> str:
+        if value == SECRET_KEY_PLACEHOLDER or len(value) < SECRET_KEY_MIN_LENGTH:
+            raise ValueError(
+                f"SECRET_KEY ist der Platzhalter aus .env.example oder kuerzer als "
+                f"{SECRET_KEY_MIN_LENGTH} Zeichen. Neuen Wert erzeugen mit: "
+                'python -c "import secrets; print(secrets.token_hex(32))"'
+            )
+        return value
 
 
 # @lru_cache direkt über einer Funktion (ohne Klammern dahinter) heißt: "cache das

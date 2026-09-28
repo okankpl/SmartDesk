@@ -22,7 +22,9 @@ class CommentCreate(BaseModel):
     # bevor der Router ueberhaupt laeuft - dieselbe Idee wie "Fail Fast" im
     # Rest des Projekts. Field(...) ist Pydantics Weg, einem Feld zusaetzliche
     # Regeln mitzugeben, die ueber den reinen Typ (str) hinausgehen.
-    body: str = Field(min_length=1)
+    # max_length=5000: die Spalte (Text) haette kein Limit - ohne Obergrenze
+    # koennte jemand Megabytes pro Kommentar ablegen und die Datenbank fuellen.
+    body: str = Field(min_length=1, max_length=5000)
 
 
 class CommentRead(BaseModel):

@@ -119,9 +119,13 @@ def update_ticket_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> TicketRead:
-    ticket = db.get(Ticket, ticket_id)
-    if ticket is None:
-        raise HTTPException(status_code=404, detail="Ticket nicht gefunden")
+    # Sichtbarkeit ZUERST pruefen, vor den Lifecycle-Regeln. Vorher lief hier
+    # nur ein "existiert das Ticket"-Check: ein Employee konnte fremde
+    # Ticket-IDs durchprobieren und an den Fehlermeldungen ablesen, dass das
+    # Ticket existiert UND welchen Status es hat (409 "Übergang von
+    # 'in_progress' zu ... nicht erlaubt") - ein Informationsleck (IDOR).
+    # Jetzt gilt dieselbe Regel wie bei GET /tickets/{id}: fremd = 404.
+    ticket = get_visible_ticket_or_404(db.get(Ticket, ticket_id), current_user)
 
     # Prueft die Uebergangs- und Rollenregeln und setzt bei Erfolg ticket.status
     # (+ resolved_at/closed_at) direkt auf dem Objekt - wirft sonst eine
