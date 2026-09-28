@@ -90,6 +90,8 @@ Zusätzlich (für Caddy, siehe `docker-compose.prod.yml`):
 DOMAIN=smartdesk.example.com
 ```
 
+Das Backend prüft den `SECRET_KEY` beim Start: mit dem Platzhalter aus `.env.example` oder einem Wert unter 32 Zeichen startet es absichtlich nicht (siehe Troubleshooting). So kann ein vergessener Platzhalter nicht unbemerkt in Produktion landen.
+
 ## Schritt 7: Frontend bauen
 
 Wird als statische Dateien gebaut, nicht als eigener Container betrieben – Caddy liefert die fertigen Dateien direkt aus. Ein Node-Container übernimmt den Build-Schritt, ohne Node auf dem Server selbst installieren zu müssen:
@@ -126,12 +128,22 @@ docker compose -f docker-compose.prod.yml logs -f caddy
 
 Test-Account über die Swagger UI anlegen (`POST /api/auth/register`), dann über die normale Oberfläche einloggen.
 
+Sicherheits-Header prüfen (setzt das `Caddyfile`):
+
+```bash
+curl -sI https://<domain>/ | grep -iE "strict-transport|content-security|x-frame|x-content-type"
+```
+
+Alle vier Header müssen erscheinen. Fehlen sie, läuft vermutlich noch ein Caddy-Container mit altem `Caddyfile` – `docker compose -f docker-compose.prod.yml restart caddy`.
+
 ## Troubleshooting
 
 | Symptom | Wahrscheinliche Ursache |
 |---|---|
 | Zertifikat wird nicht ausgestellt / Caddy-Logs zeigen Timeout | DNS zeigt noch nicht (richtig) auf die Server-IP, oder Port 80/443 ist irgendwo blockiert (Cloud-Firewall vs. `ufw` – beide prüfen) |
 | `502 Bad Gateway` von Caddy | Backend-Container läuft nicht/ist noch am Starten - `docker compose -f docker-compose.prod.yml ps` und `logs backend` prüfen |
+| Backend startet nicht, Log zeigt `SECRET_KEY ist der Platzhalter ...` | `SECRET_KEY` in `.env` ist noch der Beispielwert oder zu kurz – neuen Wert erzeugen (siehe Schritt 6), danach `docker compose -f docker-compose.prod.yml up -d backend` |
+| Swagger UI unter `/api/docs` bleibt leer ("Failed to load API definition") | Backend läuft ohne `--root-path /api` (siehe `command` in `docker-compose.prod.yml`) und sucht die API-Beschreibung deshalb unter `/openapi.json` statt `/api/openapi.json` |
 | Login funktioniert, aber Cookie kommt nicht an | `FRONTEND_ORIGIN`/`COOKIE_SECURE` in `.env` stimmen nicht mit der echten Domain überein, oder Seite wurde über `http://` statt `https://` aufgerufen |
 | Seiten-Reload auf z.B. `/dashboard` gibt 404 | `try_files` im `Caddyfile` fehlt/falsch – sollte auf `index.html` zurückfallen (SPA-Routing) |
 

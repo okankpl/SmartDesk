@@ -22,6 +22,7 @@ Warum welche Technologie gewählt wurde, wichtige Konzepte (Docker, Hashing, JWT
 - **Ticket-Kommentare** – `GET/POST /tickets/{id}/comments`, im Detail-Popup als chronologischer Verlauf mit Eingabefeld; wer ein Ticket nicht sehen darf, sieht auch dessen Kommentare nicht (gleiche Regel, zentral in `app/services/ticket_access.py`); Kommentare sind bewusst unveränderlich (Nachvollziehbarkeit)
 - **Frontend-Komponenten-/Service-Tests** – `Auth`, `authGuard`, `TicketCard`, `TicketComments`, `Dashboard`, mit gemocktem `HttpClient`, eigene CI-Pipeline
 - **Deployment vorbereitet** – produktionsfähige Konfiguration (konfigurierbare CORS-Origin/Cookie-Flags, Angular-Environments), VPS-Anleitung samt Betriebs-Skripten (`scripts/`)
+- **Security-Review durchgeführt** – u.a. ungeschützten `/users`-Endpunkt abgesichert, Mass Assignment beim Ticket-Status und ein Timing-Leck beim Login geschlossen, Eingabevalidierung, Start-Prüfung des `SECRET_KEY`, Sicherheits-Header (CSP, HSTS), Container ohne root-Rechte – Details und alle Funde in [Abschnitt 6 der Architektur-Doku](docs/architektur-und-konzepte.md#security-review-funde-und-behebungen)
 
 Nächste Schritte: Autorennamen bei Kommentaren anzeigen, Registrierungs-Seite im Frontend, echte HTTP-Integrationstests im Backend, VPS-Deployment tatsächlich durchführen.
 

@@ -81,6 +81,8 @@ Nicht-funktionale Anforderungen (NFA) beschreiben **Qualitätseigenschaften** st
 |---|---|---|
 | **Sicherheit** | Passwörter dürfen niemals im Klartext gespeichert werden | bcrypt-Hashing ([Abschnitt 6](#6-sicherheitsentscheidungen-bei-den-auth-endpunkten)) |
 | **Sicherheit** | Zugriff muss nachweisbar an einen Nutzer gebunden sein | JWT mit `sub`/`role`/`exp` |
+| **Sicherheit** | Alle Eingaben werden serverseitig geprüft, ungültige Daten erzeugen `422`, nie `500` | Pydantic-Schemas mit Format-/Längenregeln ([Abschnitt 6](#security-review-funde-und-behebungen)) |
+| **Sicherheit** | Der Browser erhält zusätzliche Schutzanweisungen gegen XSS, Clickjacking und HTTPS-Downgrade | Sicherheits-Header im `Caddyfile` (CSP, HSTS, `X-Frame-Options`) |
 | **Wartbarkeit** | Code muss von anderen Entwicklern verstanden und erweitert werden können | Schichtenarchitektur ([Abschnitt 4](#4-aufbau-des-backends-die-vier-schichten)), durchgängige Kommentare |
 | **Nachvollziehbarkeit** | Datenbank-Änderungen müssen versioniert und rückgängig machbar sein | Alembic-Migrationen |
 | **Testbarkeit** | Kernlogik muss automatisiert geprüft werden können, ohne die ganze App zu starten | Backend: reine Funktionen in `security.py`/`ticket_lifecycle.py` + pytest + CI. Frontend: Komponenten-/Service-Tests mit gemocktem `HttpClient` (Vitest) + CI |
@@ -316,9 +318,13 @@ stateDiagram-v2
 
 **Warum liefern "falsches Passwort" und "Email existiert nicht beim Login" exakt dieselbe Fehlermeldung?** Das ist eine bewusste Sicherheitsentscheidung gegen **User Enumeration**: Würde der Server bei einer unbekannten Email eine andere Meldung zeigen als bei einem falschen Passwort, könnte ein Angreifer systematisch durchprobieren, welche Email-Adressen überhaupt registriert sind – ein Datenschutzproblem für sich, selbst ohne dass ein Passwort geknackt wird.
 
+**Warum reicht dieselbe Fehlermeldung allein nicht (Timing-Angriff)?** bcrypt ist absichtlich langsam (bei SmartDesk rund 0,2 Sekunden pro Vergleich). Existiert die E-Mail nicht, entfällt dieser Vergleich – die Antwort käme messbar schneller. Ein Angreifer könnte registrierte Adressen dann per Zeitmessung statt per Fehlermeldung erkennen. `login` vergleicht deshalb auch bei unbekannter E-Mail gegen einen festen Dummy-Hash (`DUMMY_PASSWORD_HASH` in [security.py](../backend/app/core/security.py)), sodass beide Fälle gleich lange dauern (gemessen: jeweils ca. 176 ms).
+
 **Warum `OAuth2PasswordRequestForm` (Formular-Daten) statt JSON beim Login?** Das ist FastAPIs eingebauter, standardisierter Weg für Login-Endpunkte – dadurch funktioniert der "Authorize"-Button in der automatisch generierten Swagger-UI (`/docs`) ohne Zusatzaufwand.
 
-**Was bewusst noch NICHT geprüft wird:** `RegisterRequest.email` ist aktuell ein einfacher `str` (kein Format-Check wie "enthält @"), und `RegisterRequest.password` hat keine Mindestlänge. Das ist keine Nachlässigkeit, sondern ein dokumentierter offener Punkt – siehe [Abschnitt 9](#9-bewusste-einschränkungen--offene-punkte) für die konkrete Lösung, die dafür ansteht.
+**Wie Eingaben geprüft werden:** `RegisterRequest` ([schemas/auth.py](../backend/app/schemas/auth.py)) prüft das E-Mail-Format (`EmailStr`), speichert E-Mails einheitlich kleingeschrieben (sonst ergäben `Max@firma.de` und `max@firma.de` zwei Accounts), verlangt mindestens 8 Zeichen Passwort und höchstens 72 **Bytes** – mehr verarbeitet bcrypt technisch nicht, ab bcrypt 5.0 führte ein längeres Passwort sogar zu einem Absturz (`ValueError` → 500). Allgemein haben alle Textfelder eine Obergrenze passend zur Datenbank-Spalte (Titel 200, Name 200, E-Mail 255) bzw. eine sinnvolle Grenze bei unbegrenzten `Text`-Spalten (Beschreibung 10.000, Kommentar 5.000 Zeichen). Ohne diese Grenzen scheitert ein zu langer Wert erst in PostgreSQL und kommt als unverständlicher `500` statt als `422` mit Hinweis auf das betroffene Feld zurück.
+
+**Warum startet das Backend mit schwachem `SECRET_KEY` gar nicht?** Mit dem `SECRET_KEY` werden alle JWTs signiert. Wer ihn kennt, kann sich selbst gültige Tokens für beliebige Nutzer ausstellen – auch mit Admin-Rolle. Der Platzhalter aus `.env.example` steht öffentlich im Repository; wird er versehentlich übernommen, fällt das im Betrieb niemandem auf. `Settings` ([config.py](../backend/app/core/config.py)) lehnt den Platzhalter und Schlüssel unter 32 Zeichen deshalb beim Start ab (**Fail Fast**). `decode_access_token` akzeptiert außerdem nur den fest eingestellten Algorithmus `HS256` – ein Token mit Algorithmus `"none"` (gar keine Signatur, ein bekannter JWT-Angriff) wird abgelehnt.
 
 ### Wie der Token im Browser gespeichert wird: HttpOnly-Cookie statt localStorage
 
@@ -369,6 +375,24 @@ Die Regel "wer darf welches einzelne Ticket sehen" steht an genau einer Stelle: 
 Für Status-Übergänge läuft die Rollenprüfung weiterhin separat in `ticket_lifecycle.py` (siehe Abschnitt 5), weil sie vom *aktuellen Status* abhängt, nicht nur von der Rolle allein.
 
 Eine zweite Konsequenz derselben Änderung: `POST /tickets` nimmt `requester_id` nicht mehr vom Client entgegen (das wäre seit es einen eingeloggten Nutzer gibt ein Sicherheitsloch – jeder hätte Tickets im Namen anderer anlegen können), sondern setzt es serverseitig aus `current_user.id`. Dasselbe gilt für `author_id` bei `POST /tickets/{id}/comments`: das Eingabe-Schema `CommentCreate` enthält nur `body`, ein mitgeschicktes `author_id` wird ignoriert (Schutz vor **Mass Assignment**).
+
+### Security-Review: Funde und Behebungen
+
+Eine systematische Prüfung von Backend, Frontend, Deployment-Konfiguration, Abhängigkeiten (`npm audit`, `pip-audit`: keine bekannten Schwachstellen) und Git-Historie (keine eingecheckten Geheimnisse) ergab folgende Lücken. Jede Behebung ist durch automatisierte Tests abgesichert (`test_input_validation.py`, `test_config.py`, `test_security.py`) bzw. wurde über HTTP-Anfragen gegen eine Testdatenbank nachgeprüft:
+
+| # | Fund | Auswirkung | Behebung |
+|---|---|---|---|
+| 1 | `/users` hatte **keine** Authentifizierung | Jeder, auch ohne Login, konnte E-Mail, Name und Rolle aller Nutzer abrufen | Router-weite Dependency `require_roles(AGENT, ADMIN)` in [users.py](../backend/app/routers/users.py) |
+| 2 | `TicketCreate` erbte das Feld `status` | Ein Ticket ließ sich per `{"status": "closed"}` direkt geschlossen anlegen – an allen Lifecycle-Regeln vorbei (Mass Assignment) | `status` nur noch im Antwort-Schema `TicketRead` |
+| 3 | `PATCH /tickets/{id}/status` prüfte keine Sichtbarkeit | Ein Employee konnte fremde Ticket-IDs durchprobieren und an den Fehlermeldungen Existenz und Status ablesen (IDOR) | Gleiche Regel wie `GET /tickets/{id}`: `get_visible_ticket_or_404` → fremd = `404` |
+| 4 | Login-Antwortzeit verriet registrierte E-Mails | User Enumeration per Zeitmessung | Dummy-Hash-Vergleich (s.o.) |
+| 5 | Platzhalter-`SECRET_KEY` wurde akzeptiert | Bei Übernahme aus `.env.example`: Token-Fälschung für beliebige Nutzer | Start-Validierung in `Settings` |
+| 6 | Fehlende Längen-/Formatprüfungen, Passwort > 72 Bytes, `{"title": null}` | Ungültige Daten, `500`-Fehler statt `422`, Speicherfüllung durch riesige Texte | Pydantic-Regeln in den Schemas, `verify_password` fängt überlange Passwörter ab |
+| 7 | Lokale `docker-compose.yml` öffnete Postgres/Backend auf allen Netzwerkschnittstellen | Im selben WLAN war die Datenbank mit dem Standard-Passwort erreichbar | Ports an `127.0.0.1` gebunden |
+| 8 | Backend-Container lief als `root` | Bei einer ausgenutzten Lücke sofort volle Rechte im Container | Eigener Benutzer `appuser` im [Dockerfile](../backend/Dockerfile) (Principle of Least Privilege) |
+| 9 | Keine Sicherheits-Header, keine Größenbegrenzung für Requests | Kein Schutz vor Clickjacking, HTTPS-Downgrade, nachgeladenen Fremdskripten | HSTS, CSP, `X-Frame-Options`, `nosniff`, `Referrer-Policy`, 1-MB-Limit im [Caddyfile](../Caddyfile); der Angular-Build lädt Styles ohne Inline-Event-Handler, damit die CSP ohne `'unsafe-inline'` für Skripte auskommt |
+
+Der Fund #1 zeigt ein typisches Muster: eine Absicherung, die "fast überall" gilt, ist gefährlicher als eine fehlende, weil sie ein falsches Sicherheitsgefühl erzeugt. Router-weite Dependencies (`APIRouter(dependencies=[...])`) machen es unmöglich, einen einzelnen Endpunkt zu vergessen.
 
 ---
 
@@ -438,9 +462,10 @@ Ehrlich zu benennen, was fehlt, ist selbst ein Qualitätsmerkmal. Hier die aktue
 
 | Lücke | Warum sie (noch) offen ist | Wie man sie in echt schließt |
 |---|---|---|
-| `/users`-Endpunkte sind für jede eingeloggte Rolle offen | Ausdrücklich außerhalb des Ticket-Rollenkonzepts gehalten (Roadmap-Punkt betraf nur Ticket-Endpunkte) | z.B. `GET /users` auf `AGENT`/`ADMIN` beschränken (Employees brauchen kein komplettes Nutzerverzeichnis) |
-| `RegisterRequest.email` prüft kein E-Mail-Format | Bewusst zurückgestellt, um Register/Login zuerst end-to-end zum Laufen zu bringen | Pydantics `EmailStr`-Typ statt `str` (braucht das zusätzliche Package `email-validator` in `requirements.txt`) |
-| `RegisterRequest.password` hat keine Mindestlänge/-stärke | s.o. | ein `Field(min_length=8)` oder ein eigener Pydantic-`validator` |
+| ~~`/users`-Endpunkte ungeschützt, keine E-Mail-/Passwort-Prüfung~~ | – | erledigt, siehe [Security-Review](#security-review-funde-und-behebungen) |
+| Keine Begrenzung der Login-Versuche (Rate Limiting) | Braucht zusätzliche Infrastruktur (Zähler pro IP/Konto, z.B. in Redis) | Rate Limiting im Backend (z.B. `slowapi`) oder im Reverse Proxy, zusätzlich temporäre Kontosperre nach mehreren Fehlversuchen |
+| `POST /auth/register` verrät per `409`, dass eine E-Mail bereits registriert ist | Bewusster Kompromiss zugunsten einer direkten, verständlichen Rückmeldung | Registrierung immer mit derselben Antwort bestätigen und das Ergebnis per E-Mail mitteilen (braucht E-Mail-Versand) |
+| Ein Bearbeiter (`assignee_id`) kann auch ein Employee sein | Fachliche Regel noch nicht festgelegt | Prüfung in `update_ticket`, dass der zugewiesene Nutzer `AGENT` oder `ADMIN` ist |
 | Kein Token-Widerruf (nur `/auth/logout`, das löscht den Cookie, der JWT bleibt bis zum Ablauf technisch gültig) | JWTs sind zustandslos per Design (siehe Abschnitt 3) – echter Widerruf widerspricht dem Grundprinzip | entweder kurze Ablaufzeiten + Refresh-Token-Flow, oder eine serverseitige Blockliste für widerrufene Tokens |
 | `GET /tickets`, `GET /users` liefern immer die komplette (bzw. rollen-gefilterte) Liste ohne Paginierung | Für die aktuelle, kleine Testdatenmenge unkritisch | Pagination (`?limit=20&offset=0`), Standard bei jeder wachsenden REST-API |
 | ~~CORS/Cookie-Flags/Frontend-`API_URL` fest auf `localhost`~~ | – | erledigt: `FRONTEND_ORIGIN`/`COOKIE_SECURE` als Backend-Settings, Angular-`environment.ts`/`environment.prod.ts` – siehe [Deployment-Anleitung](deployment.md) |
