@@ -28,7 +28,15 @@ class Comment(Base):
     # GET /tickets/{id}/comments) - ohne Index muesste Postgres bei
     # wachsender Tabelle jedes Mal alle Zeilen durchsuchen, um die richtigen
     # herauszufiltern.
-    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"), nullable=False, index=True)
+    # ondelete="CASCADE": wird ein Ticket geloescht (nur ADMIN, siehe
+    # delete_ticket), loescht PostgreSQL dessen Kommentare automatisch mit.
+    # Ohne das verweigert die Datenbank das Loeschen eines Tickets, auf das
+    # noch Kommentare verweisen (Fremdschluessel-Regel) - der Endpunkt
+    # antwortete dann mit 500. Kommentare ohne ihr Ticket ergeben fachlich
+    # keinen Sinn, also ist Mitloeschen hier die passende Regel.
+    ticket_id: Mapped[int] = mapped_column(
+        ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     author_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     # Text statt String(n): kein Laengenlimit noetig, wie schon bei
     # Ticket.description (siehe models/ticket.py).

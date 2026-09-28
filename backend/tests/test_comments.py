@@ -15,6 +15,17 @@ def test_comment_holds_ticket_and_author_reference():
     assert comment.body == "Testkommentar"
 
 
+def test_comments_are_deleted_together_with_their_ticket():
+    """Ohne ON DELETE CASCADE verweigert PostgreSQL das Loeschen eines
+    Tickets, das noch Kommentare hat - DELETE /tickets/{id} endete mit 500.
+    Der eigentliche Effekt passiert in der Datenbank; dieser Test sichert ab,
+    dass die Regel im Model nicht versehentlich wieder verschwindet (sonst
+    wuerde die naechste autogenerierte Migration sie still entfernen)."""
+    (foreign_key,) = Comment.__table__.c.ticket_id.foreign_keys
+
+    assert foreign_key.ondelete == "CASCADE"
+
+
 def test_comment_create_accepts_normal_text():
     payload = CommentCreate(body="Rueckfrage an IT gestellt")
 
