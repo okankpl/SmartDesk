@@ -15,7 +15,18 @@ COPY . .
 # Administratorrechte - als "appuser" darf er dort deutlich weniger
 # ("Principle of Least Privilege"). --create-home legt ein Home-Verzeichnis
 # an, das manche Python-Tools fuer Cache-Dateien erwarten.
+#
+# Folge: appuser darf den Code in /app nur lesen, nicht veraendern - genau
+# das ist gewollt. Der einzige Befehl, der Dateien ins Projekt schreibt
+# (neue Migration per "alembic revision --autogenerate"), laeuft deshalb
+# gezielt mit "docker compose exec -u root ..." (siehe README).
 RUN useradd --create-home appuser
 USER appuser
+
+# pytest legt sonst einen Cache-Ordner (.pytest_cache) in /app an - das
+# darf appuser nicht, jeder Testlauf endete mit einer Warnung. Im Container
+# wird der Cache (z.B. fuer "nur zuletzt fehlgeschlagene Tests") nicht
+# gebraucht, also abschalten statt dem Benutzer Schreibrechte zu geben.
+ENV PYTEST_ADDOPTS="-p no:cacheprovider"
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
