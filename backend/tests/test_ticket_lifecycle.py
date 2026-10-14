@@ -79,6 +79,20 @@ def test_requester_can_reject_resolved_ticket():
     assert ticket.status == TicketStatus.IN_PROGRESS
 
 
+def test_rejecting_a_solution_clears_resolved_at():
+    """Ein abgelehntes Ticket ist nicht mehr geloest. Blieb resolved_at stehen,
+    zaehlte das Dashboard es weiter unter "Heute geloest", und das Detail-Popup
+    zeigte bei einem Ticket in Bearbeitung eine "Geloest"-Zeile an."""
+    requester = make_user(UserRole.EMPLOYEE, user_id=7)
+    ticket = make_ticket(TicketStatus.IN_PROGRESS, requester_id=7)
+    agent = make_user(UserRole.AGENT, user_id=2)
+    apply_status_transition(ticket, TicketStatus.RESOLVED, agent)
+
+    apply_status_transition(ticket, TicketStatus.IN_PROGRESS, requester)
+
+    assert ticket.resolved_at is None
+
+
 def test_other_employee_cannot_reject_foreign_ticket():
     """Objekt-Ebene-Pruefung: die Rolle EMPLOYEE darf ablehnen, aber nur beim
     eigenen Ticket - nicht bei einem, das ein anderer Mitarbeiter gemeldet hat."""

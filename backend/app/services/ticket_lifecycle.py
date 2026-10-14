@@ -75,12 +75,23 @@ def apply_status_transition(ticket: Ticket, new_status: TicketStatus, current_us
             detail="Nur der Melder eines Tickets darf es ablehnen",
         )
 
+    previous_status = ticket.status
     ticket.status = new_status
     now = datetime.now(timezone.utc)
     if new_status == TicketStatus.RESOLVED:
         ticket.resolved_at = now
     elif new_status == TicketStatus.CLOSED:
         ticket.closed_at = now
+    elif previous_status == TicketStatus.RESOLVED:
+        # RESOLVED -> IN_PROGRESS: die Loesung wurde abgelehnt, das Ticket ist
+        # also NICHT mehr geloest. resolved_at beschreibt "seit wann ist es
+        # geloest" - ein stehengebliebener Wert liesse das Dashboard ein
+        # abgelehntes Ticket weiter unter "Heute geloest" zaehlen. Wird es
+        # spaeter erneut geloest, setzt der RESOLVED-Zweig oben den neuen
+        # Zeitpunkt. (Den Verlauf "wann wurde wie oft abgelehnt" kann dieses
+        # eine Feld ohnehin nicht abbilden - dafuer braeuchte es eine eigene
+        # Historien-Tabelle.)
+        ticket.resolved_at = None
 
 
 def get_allowed_next_statuses(ticket: Ticket, current_user: User) -> list[TicketStatus]:
