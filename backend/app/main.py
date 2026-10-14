@@ -1,11 +1,18 @@
 # "from X import Y" holt sich NUR den Namen Y aus dem Modul/Paket X - nicht alles.
 # FastAPI ist die Haupt-Klasse des Frameworks, mit der man die App-Instanz erzeugt.
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException, status
 
 # CORSMiddleware liegt in einem Untermodul (fastapi.middleware.cors), daher der Punkt-Pfad.
 from fastapi.middleware.cors import CORSMiddleware
 
+# text(...) verpackt rohes SQL so, dass SQLAlchemy es ausführen darf;
+# SQLAlchemyError ist die Basisklasse aller Datenbankfehler von SQLAlchemy.
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+
 from app.core.config import get_settings
+from app.core.database import get_db
 from app.core.error_handlers import register_error_handlers
 
 # "app.routers" ist unser eigener Ordner backend/app/routers/. "tickets" ist die Datei
@@ -63,7 +70,31 @@ app.include_router(users.router)
 # "-> dict[str, str]" ist der Type Hint für den Rückgabewert: ein Dictionary (vergleichbar
 # mit einem JS-Objekt / einer Map), dessen Schlüssel UND Werte beides Strings sind.
 def health() -> dict[str, str]:
-    # Bewusst ohne DB-Zugriff: prüft nur, ob der Container überhaupt läuft.
+    # Bewusst ohne DB-Zugriff: prüft nur, ob der Prozess überhaupt läuft und
+    # Anfragen annimmt ("Liveness"). Ob er auch arbeiten KANN, prüft
+    # /health/ready unten.
     # {"status": "ok"} ist ein Dictionary-Literal. FastAPI wandelt das automatisch in
     # JSON um (kein manuelles json.dumps() nötig).
     return {"status": "ok"}
+
+
+@app.get("/health/ready")
+def readiness(db: Session = Depends(get_db)) -> dict[str, str]:
+    """Prüft, ob das Backend wirklich arbeiten kann, also auch die Datenbank
+    erreicht ("Readiness") - anders als /health oben, das nur sagt "der
+    Prozess läuft".
+
+    Der Unterschied ist für die Überwachung wichtig: mit falschem Datenbank-
+    Passwort oder gestopptem Postgres-Container antwortet /health weiter
+    "ok", obwohl jede echte Anfrage mit 500 scheitert. scripts/deploy.sh
+    und scripts/healthcheck.sh fragen deshalb diesen Endpunkt ab.
+    503 Service Unavailable ist der Standard-Statuscode für "gerade nicht
+    einsatzbereit, später erneut versuchen".
+    """
+    try:
+        # "SELECT 1" ist die kleinstmögliche Abfrage: sie liest keine Tabelle,
+        # beweist aber, dass Verbindung und Anmeldung bei Postgres klappen.
+        db.execute(text("SELECT 1"))
+    except SQLAlchemyError:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Datenbank nicht erreichbar")
+    return {"status": "ok", "database": "ok"}
