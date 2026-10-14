@@ -21,10 +21,11 @@ Warum welche Technologie gewählt wurde, wichtige Konzepte (Docker, Hashing, JWT
 - **Ticket erstellen, Details ansehen & Status ändern über die Oberfläche** – `/tickets/new`, anklickbare Ticket-Karten öffnen ein Detail-Popup mit Beschreibung und passenden Aktions-Buttons (Claim/Lösen/Schließen/Ablehnen) – welche Buttons erscheinen, berechnet das Backend pro Rolle/Status, nicht das Frontend
 - **Ticket-Kommentare** – `GET/POST /tickets/{id}/comments`, im Detail-Popup als chronologischer Verlauf mit Eingabefeld; wer ein Ticket nicht sehen darf, sieht auch dessen Kommentare nicht (gleiche Regel, zentral in `app/services/ticket_access.py`); Kommentare sind bewusst unveränderlich (Nachvollziehbarkeit)
 - **Frontend-Komponenten-/Service-Tests** – `Auth`, `authGuard`, `TicketCard`, `TicketComments`, `Dashboard`, mit gemocktem `HttpClient`, eigene CI-Pipeline
-- **Deployment vorbereitet** – produktionsfähige Konfiguration (konfigurierbare CORS-Origin/Cookie-Flags, Angular-Environments), VPS-Anleitung samt Betriebs-Skripten (`scripts/`)
+- **Deployment vorbereitet** – produktionsfähige Konfiguration (konfigurierbare CORS-Origin/Cookie-Flags, Angular-Environments), VPS-Anleitung samt Betriebs-Skripten (`scripts/`), lokal als kompletter Produktions-Stack getestet: Deployment mit Migration vor dem Umschalten, Readiness-Check `/health/ready` (prüft auch die Datenbank), Backup und Wiederherstellung, komprimierte Auslieferung und Browser-Caching über Caddy
+- **Robustheit** – Zeitstempel mit Zeitzone (korrekte Ortszeit im Browser), Tickets in fester Reihenfolge (Priorität, dann Alter), automatische Weiterleitung zum Login bei abgelaufener Sitzung, Fehlermeldungen passend zur tatsächlichen Ursache, Wiederverbindung nach einem Datenbank-Neustart, fachliche Fehler im Backend unabhängig von HTTP (`app/services/errors.py`)
 - **Security-Review durchgeführt** – u.a. ungeschützten `/users`-Endpunkt abgesichert, Mass Assignment beim Ticket-Status und ein Timing-Leck beim Login geschlossen, Eingabevalidierung, Start-Prüfung des `SECRET_KEY`, Sicherheits-Header (CSP, HSTS), Container ohne root-Rechte – Details und alle Funde in [Abschnitt 6 der Architektur-Doku](docs/architektur-und-konzepte.md#security-review-funde-und-behebungen)
 
-Nächste Schritte: Autorennamen bei Kommentaren anzeigen, Registrierungs-Seite im Frontend, echte HTTP-Integrationstests im Backend, VPS-Deployment tatsächlich durchführen.
+Nächste Schritte: Bearbeiter-Regeln (nur Agents/Admins, "Übernehmen" trägt sich ein, nur der Bearbeiter löst), Begrenzung der Login-Versuche, Passwort-Reset per E-Mail, Autorennamen bei Kommentaren, Registrierungs-Seite im Frontend, echte HTTP-Integrationstests gegen PostgreSQL, VPS-Deployment tatsächlich durchführen.
 
 ## Backend lokal starten
 
@@ -40,6 +41,8 @@ Danach:
 - Health-Check: http://localhost:8000/health
 
 ## Frontend lokal starten
+
+Voraussetzung: Node.js 24 (Version steht in `frontend/.nvmrc`; Angular 22 läuft erst ab Node 22.22 bzw. 24.15).
 
 ```bash
 cd frontend
@@ -60,7 +63,7 @@ cd frontend
 npm test
 ```
 
-Beide laufen automatisch bei jedem Push/PR auf `main` über GitHub Actions (`.github/workflows/backend-tests.yml`, `.github/workflows/frontend-tests.yml`).
+Beide laufen automatisch bei jedem Push/PR auf `main` über GitHub Actions (`.github/workflows/backend-tests.yml`, `.github/workflows/frontend-tests.yml`); die Frontend-Pipeline prüft zusätzlich den Produktions-Build.
 
 ## Datenbank-Migrationen (Alembic)
 
