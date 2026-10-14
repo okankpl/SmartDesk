@@ -30,3 +30,7 @@ backend/.venv/
 
 # Persönliche Lernnotizen / Interview-Vorbereitung (nicht fürs Portfolio bestimmt)
 notes/
+
+# Datenbank-Backups (scripts/backup.sh) - enthalten E-Mail-Adressen und
+# Passwort-Hashes aller Nutzer und duerfen NIE ins (oeffentliche) Repository.
+backups/

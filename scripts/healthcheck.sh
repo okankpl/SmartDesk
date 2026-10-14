@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Minimalstes Monitoring-Beispiel: prueft, ob /api/health mit Erfolg antwortet,
+# Minimalstes Monitoring-Beispiel: prueft, ob /api/health/ready mit Erfolg antwortet,
 # schreibt bei einem Fehlschlag eine Zeile ins System-Log und beendet sich mit
 # einem Fehler-Exitcode (wichtig, damit z.B. ein Cron-Job merkt, dass etwas
 # schiefging - siehe Kommentar ganz unten).
@@ -15,8 +15,10 @@ set -euo pipefail
 # "${1:-...}": nimmt das erste Kommandozeilen-Argument, falls eins mitgegeben
 # wurde, sonst den Wert nach dem ":-" als Standardwert - so funktioniert das
 # Skript auch ohne Argument (mit einem sinnvollen Default) UND laesst sich bei
-# Bedarf gegen eine andere URL testen: ./scripts/healthcheck.sh https://andere-domain/api/health
-URL="${1:-https://smartdesk.example.com/api/health}"
+# Bedarf gegen eine andere URL testen: ./scripts/healthcheck.sh https://andere-domain/api/health/ready
+# /health/ready statt /health: nur ersteres prueft auch die Datenbank - /health
+# meldet "ok", solange der Prozess laeuft, selbst wenn jede echte Anfrage scheitert.
+URL="${1:-https://smartdesk.example.com/api/health/ready}"
 
 # curl -f: behandelt HTTP-Fehler-Statuscodes (4xx/5xx) selbst als Fehler
 # (ohne -f waere ein 500er trotzdem ein "erfolgreicher" curl-Aufruf, nur mit
