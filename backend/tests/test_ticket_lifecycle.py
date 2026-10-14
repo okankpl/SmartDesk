@@ -1,8 +1,8 @@
 import pytest
-from fastapi import HTTPException
 
 from app.models.ticket import Ticket, TicketStatus
 from app.models.user import User, UserRole
+from app.services.errors import InvalidTransitionError, PermissionDeniedError
 from app.services.ticket_lifecycle import apply_status_transition, get_allowed_next_statuses
 
 # Ticket/User sind SQLAlchemy-Models, lassen sich aber wie ganz normale Python-
@@ -33,10 +33,9 @@ def test_employee_cannot_claim_open_ticket():
     ticket = make_ticket(TicketStatus.OPEN)
     employee = make_user(UserRole.EMPLOYEE)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(PermissionDeniedError):
         apply_status_transition(ticket, TicketStatus.IN_PROGRESS, employee)
 
-    assert exc_info.value.status_code == 403
     assert ticket.status == TicketStatus.OPEN  # unveraendert geblieben
 
 
@@ -54,10 +53,8 @@ def test_only_admin_can_close_resolved_ticket():
     ticket = make_ticket(TicketStatus.RESOLVED)
     agent = make_user(UserRole.AGENT)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(PermissionDeniedError):
         apply_status_transition(ticket, TicketStatus.CLOSED, agent)
-
-    assert exc_info.value.status_code == 403
 
 
 def test_admin_closing_ticket_sets_closed_at():
@@ -99,10 +96,8 @@ def test_other_employee_cannot_reject_foreign_ticket():
     ticket = make_ticket(TicketStatus.RESOLVED, requester_id=7)
     other_employee = make_user(UserRole.EMPLOYEE, user_id=99)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(PermissionDeniedError):
         apply_status_transition(ticket, TicketStatus.IN_PROGRESS, other_employee)
-
-    assert exc_info.value.status_code == 403
 
 
 def test_nonexistent_transition_raises_conflict():
@@ -111,20 +106,16 @@ def test_nonexistent_transition_raises_conflict():
     ticket = make_ticket(TicketStatus.OPEN)
     admin = make_user(UserRole.ADMIN)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(InvalidTransitionError):
         apply_status_transition(ticket, TicketStatus.CLOSED, admin)
-
-    assert exc_info.value.status_code == 409
 
 
 def test_closed_ticket_has_no_further_transitions():
     ticket = make_ticket(TicketStatus.CLOSED)
     admin = make_user(UserRole.ADMIN)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(InvalidTransitionError):
         apply_status_transition(ticket, TicketStatus.IN_PROGRESS, admin)
-
-    assert exc_info.value.status_code == 409
 
 
 # --- get_allowed_next_statuses: dieselben Regeln, jetzt als Liste statt als

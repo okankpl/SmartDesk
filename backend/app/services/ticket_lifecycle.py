@@ -1,9 +1,8 @@
 from datetime import datetime, timezone
 
-from fastapi import HTTPException, status
-
 from app.models.ticket import Ticket, TicketStatus
 from app.models.user import User, UserRole
+from app.services.errors import InvalidTransitionError, PermissionDeniedError
 
 # Erlaubte Ziel-Status pro Ausgangsstatus, jeweils mit den Rollen, die GENAU DIESEN
 # Uebergang ausloesen duerfen. Ein Status, der hier fuer einen Ausgangsstatus nicht
@@ -40,29 +39,25 @@ def apply_status_transition(ticket: Ticket, new_status: TicketStatus, current_us
     """Prueft einen Statuswechsel gegen ALLOWED_TRANSITIONS und vollzieht ihn.
 
     Veraendert `ticket` nur, wenn (a) der Uebergang fachlich ueberhaupt existiert
-    und (b) die Rolle von `current_user` dafuer freigegeben ist. Sonst wird eine
-    passende HTTPException geworfen - der Router muss sich um Fehlerfaelle nicht
-    mehr kuemmern, nur noch db.commit() aufrufen, wenn diese Funktion durchlaeuft.
+    und (b) die Rolle von `current_user` dafuer freigegeben ist. Sonst wird ein
+    fachlicher Fehler aus services/errors.py geworfen - der Router muss sich um
+    Fehlerfaelle nicht kuemmern, nur noch db.commit() aufrufen, wenn diese
+    Funktion durchlaeuft. Zu welchem HTTP-Statuscode ein Fehler wird, steht in
+    core/error_handlers.py.
     """
     allowed_roles = ALLOWED_TRANSITIONS.get(ticket.status, {}).get(new_status)
     if allowed_roles is None:
-        # 409 statt 400: die Anfrage selbst ist syntaktisch gueltig (new_status ist
-        # ein echter TicketStatus-Wert), widerspricht aber dem aktuellen Zustand
-        # des Tickets - dieselbe Statuscode-Logik wie beim "Email bereits
-        # registriert"-Fall in auth.py.
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Übergang von '{ticket.status.value}' zu '{new_status.value}' ist nicht erlaubt",
-        )
+        # Wird zu 409 statt 400: die Anfrage selbst ist syntaktisch gueltig
+        # (new_status ist ein echter TicketStatus-Wert), widerspricht aber dem
+        # aktuellen Zustand des Tickets - dieselbe Statuscode-Logik wie beim
+        # "E-Mail bereits registriert"-Fall in auth.py.
+        raise InvalidTransitionError(f"Übergang von '{ticket.status.value}' zu '{new_status.value}' ist nicht erlaubt")
 
     if current_user.role not in allowed_roles:
-        # 403 statt 401: current_user IST authentifiziert (sonst waeren wir nie
-        # hier), hat aber nicht die noetige Rolle - siehe Glossar-Eintrag
-        # "Authentifizierung vs. Autorisierung" in den Lernnotizen.
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Für diesen Statuswechsel fehlt dir die Berechtigung",
-        )
+        # Wird zu 403 statt 401: current_user IST angemeldet (sonst waeren wir
+        # nie hier), hat aber nicht die noetige Rolle. Authentifizierung ("wer
+        # bist du?") hat also geklappt, Autorisierung ("was darfst du?") nicht.
+        raise PermissionDeniedError("Für diesen Statuswechsel fehlt dir die Berechtigung")
 
     # Zusaetzliche Pruefung auf OBJEKT-Ebene, nicht nur auf Rollen-Ebene: ein
     # EMPLOYEE darf laut ALLOWED_TRANSITIONS zwar RESOLVED->IN_PROGRESS ausloesen
@@ -70,10 +65,7 @@ def apply_status_transition(ticket: Ticket, new_status: TicketStatus, current_us
     # bei fremden Tickets. "Darf diese ROLLE das ueberhaupt" (oben) ist etwas
     # anderes als "darf DIESER Nutzer das bei GENAU DIESEM Ticket" (hier).
     if current_user.role == UserRole.EMPLOYEE and current_user.id != ticket.requester_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Nur der Melder eines Tickets darf es ablehnen",
-        )
+        raise PermissionDeniedError("Nur der Melder eines Tickets darf es ablehnen")
 
     previous_status = ticket.status
     ticket.status = new_status

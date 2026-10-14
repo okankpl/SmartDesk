@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
+from app.core.error_handlers import register_error_handlers
 
 # "app.routers" ist unser eigener Ordner backend/app/routers/. "tickets" ist die Datei
 # tickets.py darin. Wir importieren das ganze Modul (nicht nur eine Funktion daraus),
@@ -40,6 +41,11 @@ app.add_middleware(
     # (hier; im Frontend die passende Gegenstelle: withCredentials).
     allow_credentials=True,
 )
+
+# Übersetzt fachliche Fehler aus den Services (z.B. "Statuswechsel nicht
+# erlaubt") in passende HTTP-Antworten (409, 403, 404) - siehe
+# core/error_handlers.py.
+register_error_handlers(app)
 
 # Bindet alle Endpunkte, die in tickets.py mit @router.get/@router.post definiert sind,
 # in diese App ein. tickets.router ist das APIRouter-Objekt, das dort erzeugt wurde -

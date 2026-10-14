@@ -1,8 +1,8 @@
 import pytest
-from fastapi import HTTPException
 
 from app.models.ticket import Ticket
 from app.models.user import User, UserRole
+from app.services.errors import TicketNotFoundError
 from app.services.ticket_access import get_visible_ticket_or_404, is_ticket_visible
 
 # Gleiches Muster wie test_ticket_lifecycle.py: Ticket/User als reine
@@ -54,10 +54,8 @@ def test_get_visible_ticket_or_404_returns_ticket_when_visible():
 def test_get_visible_ticket_or_404_raises_for_missing_ticket():
     employee = make_user(UserRole.EMPLOYEE)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(TicketNotFoundError):
         get_visible_ticket_or_404(None, employee)
-
-    assert exc_info.value.status_code == 404
 
 
 def test_get_visible_ticket_or_404_raises_404_not_403_for_foreign_ticket():
@@ -66,7 +64,5 @@ def test_get_visible_ticket_or_404_raises_404_not_403_for_foreign_ticket():
     ticket = make_ticket(requester_id=7)
     other_employee = make_user(UserRole.EMPLOYEE, user_id=99)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(TicketNotFoundError):
         get_visible_ticket_or_404(ticket, other_employee)
-
-    assert exc_info.value.status_code == 404
