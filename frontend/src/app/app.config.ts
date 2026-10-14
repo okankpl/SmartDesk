@@ -21,7 +21,8 @@ import localeDe from '@angular/common/locales/de';
 // die App (ohne das wuerfe jeder inject(HttpClient) einen Fehler).
 // withInterceptors(...) haengt eine Liste von Interceptor-Funktionen ein, die
 // bei JEDER HTTP-Anfrage automatisch dazwischengeschaltet werden - siehe
-// credentials-interceptor.ts fuer das, was unser einziger Interceptor tut.
+// credentials-interceptor.ts (Cookie mitschicken) und
+// session-expired-interceptor.ts (bei abgelaufener Sitzung zum Login).
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 
 // provideRouter aktiviert Angulars Router-Modul mit der Routenliste aus
@@ -36,6 +37,7 @@ import { firstValueFrom } from 'rxjs';
 
 import { routes } from './app.routes';
 import { Auth } from './core/auth/auth';
+import { sessionExpiredInterceptor } from './core/auth/session-expired-interceptor';
 import { credentialsInterceptor } from './core/credentials-interceptor';
 
 // Registriert die de-Locale-Daten (Monatsnamen, Datumsformate, ...) - ohne das
@@ -54,7 +56,7 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes),
-    provideHttpClient(withInterceptors([credentialsInterceptor])),
+    provideHttpClient(withInterceptors([credentialsInterceptor, sessionExpiredInterceptor])),
     // Ein Objekt-Literal statt einer provideXyz()-Funktion: sagt DI direkt
     // "wenn irgendwo LOCALE_ID angefragt wird (z.B. intern vom date-Pipe),
     // liefere den festen Wert 'de-DE'".

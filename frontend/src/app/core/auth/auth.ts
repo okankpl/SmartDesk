@@ -95,6 +95,17 @@ export class Auth {
   }
 
   /**
+   * Vergisst den eingeloggten Nutzer NUR im Frontend, ohne Anfrage ans
+   * Backend. Gebraucht, wenn das Backend die Sitzung bereits selbst fuer
+   * ungueltig erklaert hat (401, z.B. weil der JWT nach 60 Minuten
+   * abgelaufen ist, siehe session-expired-interceptor.ts) - ein
+   * POST /auth/logout waere dann ueberfluessig.
+   */
+  clearSession(): void {
+    this._currentUser.set(null);
+  }
+
+  /**
    * Fragt /auth/me ab und aktualisiert das currentUser-Signal entsprechend.
    * Wird zweimal gebraucht: nach einem erfolgreichen Login (s.o.) UND beim
    * Start der App (siehe app.config.ts), um nach einem Seiten-Reload zu pruefen,

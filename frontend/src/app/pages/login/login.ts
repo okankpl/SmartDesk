@@ -5,7 +5,9 @@
 // Injection registrierten Service (hier: Auth, Router). signal() erzeugt
 // einen reaktiven Wert-Container (siehe Lernnotizen "Signal/Computed").
 import { Component, inject, signal } from '@angular/core';
-import { Router } from '@angular/router';
+// ActivatedRoute beschreibt die gerade aktive Route samt URL-Parametern -
+// hier gebraucht, um "?reason=session-expired" aus der URL zu lesen.
+import { ActivatedRoute, Router } from '@angular/router';
 import { Auth } from '../../core/auth/auth';
 
 @Component({
@@ -24,6 +26,14 @@ export class Login {
   // "public", lockerer als "private".
   private readonly auth = inject(Auth);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
+
+  // true, wenn man wegen einer abgelaufenen Sitzung hierher umgeleitet wurde
+  // (siehe session-expired-interceptor.ts). "snapshot" ist der Stand der URL
+  // beim Erzeugen der Komponente - reicht hier, weil sich der Parameter
+  // waehrend man auf der Login-Seite ist nicht mehr aendert. Deshalb auch
+  // kein Signal: der Wert wird einmal gelesen und bleibt fest.
+  protected readonly sessionExpired = this.route.snapshot.queryParamMap.get('reason') === 'session-expired';
 
   // Eigener, lokaler Formular-Zustand als Signals statt Angulars
   // FormsModule/ReactiveFormsModule - bei nur zwei simplen Textfeldern

@@ -7,6 +7,13 @@
     <p class="brand">SmartDesk</p>
     <h1>Anmelden</h1>
 
+    <!-- role="status": Screenreader lesen den Hinweis vor, sobald er
+         erscheint, ohne den Lesefluss zu unterbrechen (anders als
+         role="alert" bei echten Fehlern weiter unten). -->
+    @if (sessionExpired) {
+      <p class="info" role="status">Deine Sitzung ist abgelaufen. Bitte melde dich erneut an.</p>
+    }
+
     <label class="field">
       <span>E-Mail</span>
       <!-- [value]="..." ist "Property Binding": schreibt den Signal-Wert IN das
