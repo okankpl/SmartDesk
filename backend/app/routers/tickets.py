@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -7,7 +6,7 @@ from app.core.deps import get_current_user, require_roles
 from app.models.ticket import Ticket
 from app.models.user import User, UserRole
 from app.schemas.ticket import TicketCreate, TicketRead, TicketStatusUpdate, TicketUpdate
-from app.services.ticket_access import get_visible_ticket_or_404
+from app.services.ticket_access import get_visible_ticket_or_404, visible_tickets_query
 from app.services.ticket_lifecycle import apply_status_transition, get_allowed_next_statuses
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
@@ -38,14 +37,28 @@ def _to_ticket_read(ticket: Ticket, current_user: User) -> TicketRead:
 # list_tickets, get_ticket). Siehe docs/architektur-und-konzepte.md, Abschnitt 6/9.
 
 
+# Reihenfolge der Ticketliste - wie eine Arbeits-Warteschlange im Support:
+# dringendste Prioritaet zuerst, bei gleicher Prioritaet das aelteste Ticket
+# oben (es wartet am laengsten). Ohne ORDER BY ist die Reihenfolge in SQL
+# nicht festgelegt: PostgreSQL lieferte die Zeilen in Speicher-Reihenfolge,
+# und ein gerade geaendertes Ticket rutschte dabei ans Ende der Liste (ein
+# UPDATE legt intern eine neue Version der Zeile an).
+# priority.desc(): PostgreSQL sortiert ENUM-Werte in der Reihenfolge, in der
+# sie beim Anlegen des Typs aufgezaehlt wurden (low, medium, high, critical -
+# siehe Migration 39a8b85460dc), nicht alphabetisch. Absteigend heisst also
+# "critical" zuerst. id als letzter Tie-Breaker, wie bei den Kommentaren.
+TICKET_LIST_ORDER = (Ticket.priority.desc(), Ticket.created_at, Ticket.id)
+
+
 @router.get("", response_model=list[TicketRead])
 def list_tickets(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[TicketRead]:
-    query = select(Ticket)
     # EMPLOYEE sieht nur selbst gemeldete Tickets (Datenschutz: fremde Anliegen
     # sind nicht automatisch fuer alle sichtbar). AGENT/ADMIN sehen alles - sie
     # muessen ja Tickets bearbeiten koennen, die sie nicht selbst gemeldet haben.
-    if current_user.role == UserRole.EMPLOYEE:
-        query = query.where(Ticket.requester_id == current_user.id)
+    # Die Regel steht in services/ticket_access.py, neben der fuer Einzeltickets.
+    # *TICKET_LIST_ORDER "packt" das Tupel aus: order_by bekommt die drei
+    # Sortierkriterien als einzelne Argumente.
+    query = visible_tickets_query(current_user).order_by(*TICKET_LIST_ORDER)
     tickets = db.execute(query).scalars().all()
     return [_to_ticket_read(ticket, current_user) for ticket in tickets]
 

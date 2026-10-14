@@ -1,13 +1,34 @@
+from sqlalchemy import Select, select
+
 from app.models.ticket import Ticket
 from app.models.user import User, UserRole
 from app.services.errors import TicketNotFoundError
+
+
+def visible_tickets_query(current_user: User) -> Select[tuple[Ticket]]:
+    """Dieselbe Sichtbarkeitsregel wie is_ticket_visible unten, aber als
+    Datenbank-Abfrage fuer LISTEN (GET /tickets): EMPLOYEE bekommt per
+    SQL-WHERE nur selbst gemeldete Tickets, AGENT/ADMIN alle.
+
+    Als Abfrage statt als Python-Filter, damit fremde Tickets gar nicht erst
+    aus der Datenbank geladen werden. Gibt die Abfrage nur ZURUECK, statt sie
+    auszufuehren - der Aufrufer kann sie noch erweitern (z.B. sortieren, siehe
+    list_tickets), und der Test kann das erzeugte SQL pruefen, ohne
+    Datenbank. Select[tuple[Ticket]] ist SQLAlchemys Typ fuer "eine
+    SELECT-Abfrage, deren Zeilen je ein Ticket enthalten".
+    """
+    query = select(Ticket)
+    if current_user.role == UserRole.EMPLOYEE:
+        query = query.where(Ticket.requester_id == current_user.id)
+    return query
 
 
 def is_ticket_visible(ticket: Ticket, current_user: User) -> bool:
     """Darf current_user dieses Ticket sehen? EMPLOYEE nur eigene (selbst
     gemeldete) Tickets, AGENT/ADMIN alle.
 
-    Eine einzige Quelle fuer diese Regel, genutzt fuer das Ticket selbst
+    Eine einzige Quelle fuer diese Regel (fuer Listen in Form von
+    visible_tickets_query oben), genutzt fuer das Ticket selbst
     (get_ticket in tickets.py) UND fuer alles, was an einem Ticket "haengt"
     (aktuell: Kommentare in comments.py). Ohne diese gemeinsame Funktion
     stuende dieselbe Pruefung an mehreren Stellen im Code - und koennte sich
