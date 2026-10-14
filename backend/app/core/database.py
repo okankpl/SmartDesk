@@ -17,7 +17,15 @@ from app.core.config import get_settings
 # Modul-Ebene, kein "def" oder "class" - läuft einmal beim ersten Import dieser Datei.
 # get_settings() ruft die im vorherigen File gecachte Funktion auf und liest .database_url
 # per Punkt-Zugriff aus dem zurückgegebenen Settings-Objekt aus.
-engine = create_engine(get_settings().database_url)
+#
+# pool_pre_ping=True: bevor der Pool eine gespeicherte Verbindung an einen Request
+# herausgibt, prüft SQLAlchemy mit einer winzigen Test-Abfrage, ob sie noch lebt,
+# und ersetzt sie sonst still durch eine neue. Ohne das endete nach einem Neustart
+# des Postgres-Containers (Update, Absturz, "restart: unless-stopped") die jeweils
+# erste Anfrage mit einem 500-Fehler ("terminating connection due to administrator
+# command") - der Pool hielt noch die alte, inzwischen getrennte Verbindung.
+# Kostet pro Request einen sehr kurzen zusätzlichen Weg zur Datenbank.
+engine = create_engine(get_settings().database_url, pool_pre_ping=True)
 
 # sessionmaker(...) ist eine "Fabrik-Funktion": sie gibt uns nicht direkt eine Session,
 # sondern etwas, das wir später (SessionLocal()) aufrufen können, um neue Sessions zu
