@@ -98,6 +98,25 @@ describe('Dashboard', () => {
     expect(component['visibleTickets']().map((t) => t.id)).toEqual([2]);
   });
 
+  it('laesst Kennzahlen und Liste beim Neuladen stehen, statt kurz alles auszublenden', async () => {
+    await loadWith([makeTicket({ id: 1, status: 'open' })]);
+
+    // Dasselbe, was nach einem Statuswechsel in einer TicketCard passiert.
+    fixture.componentInstance['reloadTickets']();
+    fixture.detectChanges();
+
+    // Die neue Anfrage ist unterwegs, aber noch NICHT beantwortet - genau der
+    // Moment, in dem das Dashboard vorher komplett verschwand (Flackern).
+    const reloadRequest = httpMock.expectOne(`${API_URL}/tickets`);
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.textContent).not.toContain('Tickets werden geladen');
+    expect(root.querySelector('.stat-grid')).not.toBeNull();
+    expect(root.querySelectorAll('app-ticket-card').length).toBe(1);
+
+    reloadRequest.flush([makeTicket({ id: 1, status: 'in_progress' })]);
+    await fixture.whenStable();
+  });
+
   it('zeigt eine Fehlermeldung, wenn das Laden fehlschlaegt', async () => {
     fixture.detectChanges();
     httpMock.expectOne(`${API_URL}/tickets`).flush('Serverfehler', { status: 500, statusText: 'Server Error' });

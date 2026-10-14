@@ -67,10 +67,18 @@ export class Dashboard {
   // undefined pruefen zu muessen. "??" ist der Nullish-Coalescing-Operator:
   // nimmt die linke Seite, AUSSER sie ist null/undefined, dann die rechte.
   protected readonly tickets = computed(() => this.ticketsResource.value() ?? []);
-  // isLoading/error sind selbst schon Signals, die resource() bereitstellt -
-  // hier nur unter einem eigenen, im Dashboard-Kontext sprechenderen Namen
+  // Nur beim ALLERERSTEN Laden (es gibt noch gar keine Daten) zeigt das
+  // Dashboard den Lade-Hinweis. status() liefert einen von mehreren festen
+  // Zustaenden der resource(): 'loading' heisst "erster Ladevorgang",
+  // 'reloading' "laedt neu, die bisherigen Daten sind noch da". Vorher hing der
+  // Hinweis an isLoading(), das in BEIDEN Faellen true ist - nach jedem
+  // Statuswechsel (reloadTickets) verschwanden Kennzahlen und Ticketliste kurz
+  // komplett und tauchten dann wieder auf (Flackern). Jetzt bleibt die alte
+  // Liste stehen, bis die neue da ist.
+  protected readonly isInitialLoading = computed(() => this.ticketsResource.status() === 'loading');
+  // error ist selbst schon ein Signal, das resource() bereitstellt - hier nur
+  // unter einem eigenen, im Dashboard-Kontext sprechenderen Namen
   // weitergereicht (kein computed(...) noetig, weil keine Umrechnung stattfindet).
-  protected readonly isLoadingTickets = this.ticketsResource.isLoading;
   protected readonly ticketsError = this.ticketsResource.error;
 
   // Filtert automatisch alle offenen Tickets aus dem Ticket-Zustand.
