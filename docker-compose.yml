@@ -34,6 +34,11 @@ services:
       # Bind-Mount für Live-Reload: Codeänderungen wirken sofort, ohne Rebuild.
       - ./backend/app:/app/app
       - ./backend/alembic:/app/alembic
+      # Auch die Tests: ohne diesen Eintrag lief "docker compose exec backend
+      # pytest" gegen die Testdateien, die beim letzten Image-Build kopiert
+      # wurden - ein neu geschriebener oder geänderter Test wurde gar nicht
+      # gefunden bzw. lief in seiner alten Fassung.
+      - ./backend/tests:/app/tests
     ports:
       - "127.0.0.1:8000:8000"
       - "[::1]:8000:8000"
