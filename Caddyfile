@@ -32,6 +32,14 @@
 		-Server
 	}
 
+	# Komprimiert Antworten (JavaScript, CSS, JSON der API), sofern der Browser
+	# das unterstuetzt - er meldet das selbst per "Accept-Encoding"-Header.
+	# Ohne diese Zeile ging das Angular-Bundle unkomprimiert raus: gemessen
+	# 305 kB, komprimiert rund 97-99 kB. zstd ist das modernere Verfahren
+	# (schneller beim Packen und Entpacken, aehnlich klein), gzip versteht
+	# jeder Browser - Caddy nimmt das erste, das der Browser auch anbietet.
+	encode zstd gzip
+
 	# Alles unter /api/* geht ans Backend. handle_path (statt handle) schneidet
 	# das "/api"-Praefix VOR der Weiterleitung ab - das Backend selbst kennt
 	# gar kein "/api", seine Routen bleiben unveraendert (/tickets, /auth/login, ...).
@@ -64,6 +72,26 @@
 		# /api/docs laedt ihre Skripte von einem CDN und wuerde sonst blockiert,
 		# und fuer reine JSON-Antworten hat eine CSP keine Wirkung.
 		header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+
+		# Browser-Caching: Angular haengt an jede gebaute JS-, CSS- und
+		# Schriftdatei einen Hash ihres Inhalts an (z.B. main-PPTLUEAK.js,
+		# "outputHashing" in angular.json). Aendert sich der Code, aendert sich
+		# auch der Dateiname - eine Datei mit GENAU diesem Namen aendert sich
+		# also nie. Der Browser darf sie deshalb ein Jahr lang behalten, ohne
+		# nachzufragen ("immutable"). Alles andere, vor allem index.html (die
+		# auf die jeweils aktuellen Dateinamen verweist), muss er vor jeder
+		# Verwendung neu pruefen - "no-cache" heisst "erst nachfragen", nicht
+		# "nie speichern". Sonst saehen Nutzer nach einem Deployment weiter die
+		# alte Version.
+		# @hashed/@not_hashed sind "benannte Matcher": path_regexp prueft den
+		# angefragten Pfad gegen ein Muster (Bindestrich, 8 Grossbuchstaben/
+		# Ziffern, dann die Endung). Zwei sich ausschliessende Matcher statt
+		# einem Standardwert plus Ausnahme, damit nie beide Regeln auf dieselbe
+		# Datei treffen.
+		@hashed path_regexp -[A-Z0-9]{8}\.(js|css|woff2)$
+		@not_hashed not path_regexp -[A-Z0-9]{8}\.(js|css|woff2)$
+		header @hashed Cache-Control "public, max-age=31536000, immutable"
+		header @not_hashed Cache-Control "no-cache"
 
 		root * /srv/frontend
 		# try_files {path} /index.html: existiert der angefragte Pfad nicht als
