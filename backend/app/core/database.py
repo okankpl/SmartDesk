@@ -1,10 +1,12 @@
 # Generator ist ein Typ aus der Standardbibliothek, den man für Funktionen mit "yield"
 # als Rückgabetyp angibt (mehr dazu unten bei get_db).
 from collections.abc import Generator
+from datetime import datetime
 
 # create_engine baut die eigentliche "Verbindung" zur Datenbank auf (genauer: verwaltet
-# einen Pool von Verbindungen im Hintergrund).
-from sqlalchemy import create_engine
+# einen Pool von Verbindungen im Hintergrund). DateTime ist der SQLAlchemy-Spaltentyp
+# für Zeitpunkte (siehe type_annotation_map in Base unten).
+from sqlalchemy import DateTime, create_engine
 
 # DeclarativeBase, Session und sessionmaker sind drei einzelne Namen aus demselben
 # Untermodul sqlalchemy.orm.
@@ -23,11 +25,24 @@ engine = create_engine(get_settings().database_url)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-# Eine leere Klasse, die nur von DeclarativeBase erbt. Sie hat selbst keinen eigenen Code
-# (deshalb kein "pass" nötig, der Docstring reicht als Klassenkörper). Sie dient als
-# gemeinsamer "Marker": jede Tabelle in unserer App erbt später von genau dieser Base.
+# Eine Klasse, die von DeclarativeBase erbt. Sie dient als gemeinsamer "Marker": jede
+# Tabelle in unserer App erbt von genau dieser Base - und damit auch die Regel unten.
 class Base(DeclarativeBase):
     """Gemeinsame Basisklasse, von der alle SQLAlchemy-Modelle erben."""
+
+    # type_annotation_map legt fest, welcher Datenbank-Spaltentyp zu welchem
+    # Python-Typ in "Mapped[...]" gehört. Ohne diesen Eintrag wird aus
+    # Mapped[datetime] eine Spalte "timestamp WITHOUT time zone": PostgreSQL
+    # speichert dann nur die Uhrzeit (bei uns in UTC), aber nicht, in welcher
+    # Zeitzone sie gilt. Die API lieferte deshalb "2026-10-14T14:07:59" ohne
+    # Zeitzonen-Angabe, und der Browser las das als deutsche Ortszeit - jede
+    # angezeigte Uhrzeit lag 1-2 Stunden daneben.
+    # timezone=True macht daraus "timestamp WITH time zone" (kurz timestamptz):
+    # gespeichert wird ein eindeutiger Zeitpunkt, die API liefert ihn mit
+    # Zeitzone ("...Z" = UTC), und der Browser rechnet ihn korrekt in die
+    # Ortszeit um. Die Regel steht HIER statt an jeder einzelnen Spalte, damit
+    # auch jede künftige Datumsspalte automatisch richtig angelegt wird.
+    type_annotation_map = {datetime: DateTime(timezone=True)}
 
 
 # "-> Generator[Session, None, None]" heißt: diese Funktion liefert Werte vom Typ Session
