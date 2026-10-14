@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     def secret_key_must_be_strong(cls, value: str) -> str:
         if value == SECRET_KEY_PLACEHOLDER or len(value) < SECRET_KEY_MIN_LENGTH:
             raise ValueError(
-                f"SECRET_KEY ist der Platzhalter aus .env.example oder kuerzer als "
+                f"SECRET_KEY ist der Platzhalter aus .env.example oder kürzer als "
                 f"{SECRET_KEY_MIN_LENGTH} Zeichen. Neuen Wert erzeugen mit: "
                 'python -c "import secrets; print(secrets.token_hex(32))"'
             )

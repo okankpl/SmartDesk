@@ -2,7 +2,7 @@
 // bootstrapApplication() (siehe main.ts) uebergeben wird - es sagt Angular,
 // welche globalen Dienste ("Provider") der ganzen App zur Verfuegung stehen
 // sollen. LOCALE_ID ist ein sogenanntes "Injection Token": ein Platzhalter-Wert,
-// fuer den man per Dependency Injection (siehe Lernnotizen) etwas Konkretes
+// fuer den man per Dependency Injection (siehe Architektur-Doku, Abschnitt 7) etwas Konkretes
 // hinterlegen kann - hier: welche Sprache/Region fuer Datums-/Zahlenformate
 // gelten soll. inject() holt sich innerhalb einer Funktion (hier: dem
 // App-Initializer weiter unten) einen per DI bereitgestellten Service, so wie
@@ -29,7 +29,7 @@ import { provideHttpClient, withInterceptors } from '@angular/common/http';
 // app.routes.ts (welche URL zeigt welche Komponente).
 import { provideRouter } from '@angular/router';
 
-// firstValueFrom wandelt ein RxJS-Observable (siehe Lernnotizen "RxJS") in ein
+// firstValueFrom wandelt ein RxJS-Observable (einen asynchronen Datenstrom) in ein
 // natives JavaScript-Promise um - gebraucht, weil provideAppInitializer weiter
 // unten ein Promise erwartet, unser Auth-Service aber (wie HttpClient ueblich)
 // ein Observable zurueckgibt.

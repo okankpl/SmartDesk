@@ -1,9 +1,9 @@
 // @Component ist der Decorator, der eine Klasse zu einer Angular-Komponente
-// macht (siehe Lernnotizen "Decorator") - die Metadaten im Objekt darunter
+// macht - die Metadaten im Objekt darunter
 // (selector/imports/templateUrl/styleUrl) sagen Angular, wie/wo diese
 // Komponente benutzt werden kann. inject() holt einen per Dependency
 // Injection registrierten Service (hier: Auth, Router). signal() erzeugt
-// einen reaktiven Wert-Container (siehe Lernnotizen "Signal/Computed").
+// einen reaktiven Wert-Container (siehe Kommentare in core/auth/auth.ts).
 import { Component, inject, signal } from '@angular/core';
 // ActivatedRoute beschreibt die gerade aktive Route samt URL-Parametern -
 // hier gebraucht, um "?reason=session-expired" aus der URL zu lesen.
@@ -66,8 +66,8 @@ export class Login {
     this.errorMessage.set(null);
     this.isSubmitting.set(true);
 
-    // .subscribe(...) "startet" ein Observable erst wirklich (siehe Lernnotizen
-    // "RxJS") - vorher (in Auth.login) ist es nur eine Beschreibung, WAS
+    // .subscribe(...) "startet" ein Observable erst wirklich - vorher (in
+    // Auth.login) ist es nur eine Beschreibung, WAS
     // passieren soll, noch keine laufende Anfrage. next/error sind die zwei
     // moeglichen Ausgaenge: next bei Erfolg (mit dem Ergebnis als Parameter,
     // hier ungenutzt), error bei einer fehlgeschlagenen HTTP-Anfrage.

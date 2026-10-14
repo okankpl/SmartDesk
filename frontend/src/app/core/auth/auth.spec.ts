@@ -70,7 +70,7 @@ describe('Auth', () => {
     // flush mit einem Fehler-Status simuliert eine echte 401-Antwort, z.B.
     // weil kein gueltiger Cookie da ist (nicht eingeloggt) - das ist ein
     // normaler, erwarteter Fall, kein Programmfehler (siehe catchError in auth.ts).
-    req.flush('Ungueltige oder abgelaufene Anmeldedaten', { status: 401, statusText: 'Unauthorized' });
+    req.flush('Ungültige oder abgelaufene Anmeldedaten', { status: 401, statusText: 'Unauthorized' });
 
     expect(result).toBeNull();
     expect(auth.currentUser()).toBeNull();

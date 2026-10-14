@@ -38,7 +38,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> User:
         select(User).where(func.lower(User.email) == payload.email)
     ).scalar_one_or_none()
     if existing_user is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email bereits registriert")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="E-Mail bereits registriert")
 
     user = User(
         email=payload.email,  # bereits normalisiert (kleingeschrieben, ohne Leerzeichen)
@@ -74,7 +74,7 @@ def login(
     # Bewusst DIESELBE Fehlermeldung fuer "User existiert nicht" UND "Passwort falsch" -
     # sonst koennte ein Angreifer per unterschiedlicher Fehlermeldung rausfinden,
     # welche Emails ueberhaupt registriert sind.
-    invalid_credentials = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Ungueltige Anmeldedaten")
+    invalid_credentials = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Ungültige Anmeldedaten")
 
     if user is None:
         # Gleiche Meldung allein reicht nicht: bcrypt ist absichtlich langsam

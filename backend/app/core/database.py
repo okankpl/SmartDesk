@@ -58,7 +58,7 @@ class Base(DeclarativeBase):
 # Generator selbst (die beiden "None").
 def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
-    # try/finally kennst du vermutlich aus anderen Sprachen: der finally-Block läuft
+    # try/finally (wie in Java oder TypeScript): der finally-Block läuft
     # IMMER, auch wenn im try-Block ein Fehler auftritt.
     try:
         # yield statt return: die Funktion "pausiert" hier und übergibt "db" nach außen.

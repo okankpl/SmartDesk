@@ -31,7 +31,7 @@ def get_current_user(
     Der Token kann aus zwei Quellen kommen (erste gefundene gewinnt): dem
     Authorization-Header (Swagger UI, curl, Postman) oder dem HttpOnly-Cookie
     (das Angular-Frontend - dort ist der Token per Design nie in JavaScript
-    lesbar, siehe Lernnotizen "Token-Speicherung").
+    lesbar, siehe docs/architektur-und-konzepte.md, Abschnitt 6).
 
     Wird als Depends(get_current_user) in jeden Endpunkt eingehaengt, der eine
     Anmeldung voraussetzt - FastAPI loest die Kette automatisch vor jedem
@@ -41,7 +41,7 @@ def get_current_user(
     """
     unauthorized = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Ungueltige oder abgelaufene Anmeldedaten",
+        detail="Ungültige oder abgelaufene Anmeldedaten",
         # WWW-Authenticate ist der HTTP-Standard-Header, mit dem ein Server bei
         # 401 mitteilt, welches Auth-Schema erwartet wird - hier "Bearer".
         headers={"WWW-Authenticate": "Bearer"},

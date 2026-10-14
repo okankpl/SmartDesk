@@ -1,7 +1,7 @@
-// @Injectable ist ein Decorator (siehe Lernnotizen "Decorator"), der eine
+// @Injectable ist ein Decorator (eine mit @ eingeleitete Markierung), der eine
 // Klasse als "Service" markiert, den Angular per Dependency Injection (DI) an
 // andere Stellen der App verteilen kann. computed()/signal() sind Angulars
-// Reaktivitaets-Bausteine (siehe Lernnotizen "Signal/Computed") - hier nutzen
+// Reaktivitaets-Bausteine (siehe Architektur-Doku, Abschnitt 8) - hier nutzen
 // wir sie, um "wer ist eingeloggt" als reaktiven Zustand zu halten, den jede
 // Komponente automatisch mitbekommt, sobald er sich aendert.
 import { Injectable, computed, signal } from '@angular/core';

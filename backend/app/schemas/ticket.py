@@ -76,7 +76,7 @@ class TicketUpdate(BaseModel):
     @classmethod
     def reject_explicit_null(cls, value: object) -> object:
         if value is None:
-            raise ValueError("darf nicht null sein - Feld weglassen, um es unveraendert zu lassen")
+            raise ValueError("darf nicht null sein - Feld weglassen, um es unverändert zu lassen")
         return value
 
 

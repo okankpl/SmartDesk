@@ -54,7 +54,7 @@ class RegisterRequest(BaseModel):
         # Laenge in BYTES pruefen, nicht in Zeichen - siehe
         # BCRYPT_MAX_PASSWORD_BYTES in core/security.py.
         if len(value.encode("utf-8")) > BCRYPT_MAX_PASSWORD_BYTES:
-            raise ValueError(f"Passwort darf hoechstens {BCRYPT_MAX_PASSWORD_BYTES} Bytes lang sein")
+            raise ValueError(f"Passwort darf höchstens {BCRYPT_MAX_PASSWORD_BYTES} Bytes lang sein")
         return value
 
 
