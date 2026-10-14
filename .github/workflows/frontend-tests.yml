@@ -21,12 +21,19 @@ jobs:
         working-directory: frontend
 
     steps:
-      - uses: actions/checkout@v4
+      # @v7 statt @v4: die v4-Versionen laufen intern noch auf Node 20, das
+      # GitHub als veraltet markiert (Warnung in jedem Lauf).
+      - uses: actions/checkout@v7
 
       - name: Node installieren
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          # Die Node-Version steht an EINER Stelle, in frontend/.nvmrc - auch
+          # scripts/deploy.sh liest sie von dort. Vorher stand hier fest "20":
+          # Angular 22 verlangt aber mindestens Node 22.22/24.15 und bricht
+          # unter Node 20 sofort mit Exit-Code 3 ab - jeder Lauf dieses
+          # Workflows war deshalb rot, ohne dass ein einziger Test lief.
+          node-version-file: frontend/.nvmrc
           # Cached node_modules zwischen CI-Laeufen (ueber den Inhalt von
           # package-lock.json identifiziert) - macht spaetere Laeufe
           # deutlich schneller, weil npm ci nicht jedes Mal alles neu
@@ -45,5 +52,14 @@ jobs:
       - name: Abhaengigkeiten installieren
         run: npm ci
 
+      # --watch=false: einmal laufen und mit Erfolg/Fehler beenden, statt (wie
+      # lokal bei "npm test") auf Datei-Aenderungen zu warten.
       - name: Tests ausfuehren
-        run: npx ng test
+        run: npx ng test --watch=false
+
+      # Der Produktions-Build prueft mehr als die Tests: Template-Typfehler in
+      # allen Komponenten und die Groessen-Budgets aus angular.json (z.B. max.
+      # 4 kB Styles pro Komponente) - genau das, was beim Deployment sonst
+      # erst auf dem Server auffallen wuerde.
+      - name: Produktions-Build pruefen
+        run: npx ng build

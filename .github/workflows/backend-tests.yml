@@ -25,10 +25,12 @@ jobs:
 
     steps:
       # Laedt den Repo-Inhalt in die virtuelle Maschine, die diesen Job ausfuehrt.
-      - uses: actions/checkout@v4
+      # @v7: die aelteren Versionen laufen intern noch auf dem von GitHub als
+      # veraltet markierten Node 20 (siehe frontend-tests.yml).
+      - uses: actions/checkout@v7
 
       - name: Python installieren
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
