@@ -153,6 +153,24 @@ describe('TicketCard', () => {
     expect(emitted).toBe(true);
   });
 
+  it('erklaert einen 409 als "inzwischen geaendert" und feuert statusChanged NICHT', () => {
+    fixture.componentRef.setInput('ticket', makeTicket({ id: 42, status: 'open', allowed_transitions: ['in_progress'] }));
+    fixture.detectChanges();
+
+    let emitted = false;
+    fixture.componentInstance.statusChanged.subscribe(() => (emitted = true));
+
+    root.querySelector<HTMLButtonElement>('.ticket-detail__action')!.click();
+    // 409 = jemand anders hat das Ticket schon uebernommen (Wettlaufsituation).
+    httpMock
+      .expectOne(`${API_URL}/tickets/42/status`)
+      .flush({ detail: "Übergang von 'in_progress' zu 'in_progress' ist nicht erlaubt" }, { status: 409, statusText: 'Conflict' });
+    fixture.detectChanges();
+
+    expect(root.querySelector('.ticket-detail [role=alert]')?.textContent).toContain('inzwischen geändert');
+    expect(emitted).toBe(false);
+  });
+
   describe('Kommentarbereich (Lazy Loading)', () => {
     beforeEach(() => {
       fixture.componentRef.setInput('ticket', makeTicket());

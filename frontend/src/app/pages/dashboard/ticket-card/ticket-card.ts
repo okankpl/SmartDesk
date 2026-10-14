@@ -13,6 +13,7 @@ import { Component, ElementRef, computed, inject, input, output, signal, viewChi
 // (siehe ticket-card.html) - Pipes muessen wie Komponenten/Direktiven im
 // "imports"-Array der Standalone-Komponente aufgefuehrt werden.
 import { DatePipe } from '@angular/common';
+import { errorMessageFor } from '../../../core/http-error-message';
 import { TicketsService } from '../../../core/tickets/tickets';
 import { Ticket, TicketPriority, TicketStatus } from '../../../core/tickets/ticket';
 import { TicketComments } from '../ticket-comments/ticket-comments';
@@ -177,12 +178,23 @@ export class TicketCard {
         this.closeDetails();
         this.statusChanged.emit();
       },
-      error: () => {
-        // z.B. 409, wenn zwischenzeitlich schon jemand anders den Status
-        // geaendert hat (Wettlaufsituation) - dem Nutzer eine verstaendliche
-        // Meldung zeigen statt den Fehler stillschweigend zu verschlucken.
+      error: (error: unknown) => {
+        // 409, wenn zwischenzeitlich schon jemand anders den Status
+        // geaendert hat (Wettlaufsituation), 403/404 bei fehlender
+        // Berechtigung bzw. geloeschtem Ticket - dem Nutzer jeweils eine
+        // verstaendliche Meldung zeigen statt den Fehler zu verschlucken.
         this.isChangingStatus.set(false);
-        this.statusChangeError.set('Aktion nicht möglich. Vielleicht wurde das Ticket gerade geändert - Seite neu laden.');
+        this.statusChangeError.set(
+          errorMessageFor(
+            error,
+            {
+              403: 'Für diese Aktion fehlt dir die Berechtigung.',
+              404: 'Dieses Ticket gibt es nicht mehr. Bitte Seite neu laden.',
+              409: 'Das Ticket wurde inzwischen geändert. Bitte Seite neu laden.',
+            },
+            'Aktion nicht möglich. Bitte erneut versuchen.',
+          ),
+        );
       },
     });
   }

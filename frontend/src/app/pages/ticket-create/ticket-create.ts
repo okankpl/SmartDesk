@@ -1,5 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
+import { errorMessageFor } from '../../core/http-error-message';
 import { TicketsService } from '../../core/tickets/tickets';
 import { TicketPriority } from '../../core/tickets/ticket';
 
@@ -85,9 +86,18 @@ export class TicketCreate {
           // "Liste neu laden" noetig.
           this.router.navigateByUrl('/dashboard');
         },
-        error: () => {
+        error: (error: unknown) => {
           this.isSubmitting.set(false);
-          this.errorMessage.set('Ticket konnte nicht erstellt werden. Bitte erneut versuchen.');
+          // 422 = das Backend hat die Eingaben abgelehnt (siehe TicketCreate-
+          // Schema) - die maxlength-Grenzen im Formular fangen das normalerweise
+          // schon vorher ab, das hier ist die Rueckfallebene.
+          this.errorMessage.set(
+            errorMessageFor(
+              error,
+              { 422: 'Bitte Eingaben prüfen: Titel höchstens 200, Beschreibung höchstens 10.000 Zeichen.' },
+              'Ticket konnte nicht erstellt werden. Bitte erneut versuchen.',
+            ),
+          );
         },
       });
   }

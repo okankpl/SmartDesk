@@ -15,7 +15,9 @@
       <!-- Kein "required" hier - die Beschreibung ist laut Backend-Schema
            (TicketCreate) optional, siehe auch das description-Handling in
            ticket-create.ts (leer -> null). -->
-      <textarea rows="4" [value]="description()" (input)="onDescriptionInput($event)"></textarea>
+      <!-- maxlength="10000": dieselbe Grenze wie im Backend (TicketDescription
+           in schemas/ticket.py), analog zu maxlength="200" beim Titel. -->
+      <textarea rows="4" maxlength="10000" [value]="description()" (input)="onDescriptionInput($event)"></textarea>
     </label>
 
     <label class="field">

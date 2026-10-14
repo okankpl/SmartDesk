@@ -63,8 +63,12 @@
            in ticket-create.html. -->
       <label class="ticket-comments__label">
         Neuer Kommentar
+        <!-- maxlength="5000": dieselbe Grenze wie im Backend (CommentCreate,
+             max_length=5000) - der Browser laesst gar nicht erst mehr Text
+             zu, statt dass er erst beim Senden mit 422 abgelehnt wird. -->
         <textarea
           rows="3"
+          maxlength="5000"
           [value]="newCommentBody()"
           (input)="onBodyInput($event)"
           [disabled]="isSubmitting()"></textarea>

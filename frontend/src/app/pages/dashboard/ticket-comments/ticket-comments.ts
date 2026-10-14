@@ -9,6 +9,7 @@ import { firstValueFrom } from 'rxjs';
 import { Auth } from '../../../core/auth/auth';
 import { CommentsService } from '../../../core/comments/comments';
 import { TicketComment } from '../../../core/comments/comment';
+import { errorMessageFor } from '../../../core/http-error-message';
 
 // Kommentarverlauf + Eingabeformular zu EINEM Ticket. Eigene Komponente statt
 // Teil von TicketCard, weil TicketCard schon Karte, Detail-Popup und
@@ -119,11 +120,20 @@ export class TicketComments {
         // veraendern, und Signals erkennen nur neue Werte als Aenderung).
         this.commentsResource.update((comments) => [...comments, createdComment]);
       },
-      error: () => {
+      error: (error: unknown) => {
         // Eingetippter Text bleibt bewusst stehen, damit er nicht verloren
         // geht und der Nutzer es einfach nochmal versuchen kann.
         this.isSubmitting.set(false);
-        this.submitError.set('Kommentar konnte nicht gespeichert werden. Bitte erneut versuchen.');
+        this.submitError.set(
+          errorMessageFor(
+            error,
+            {
+              404: 'Dieses Ticket gibt es nicht mehr. Bitte Seite neu laden.',
+              422: 'Der Kommentar ist zu lang (höchstens 5.000 Zeichen).',
+            },
+            'Kommentar konnte nicht gespeichert werden. Bitte erneut versuchen.',
+          ),
+        );
       },
     });
   }

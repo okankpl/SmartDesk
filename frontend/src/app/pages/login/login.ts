@@ -9,6 +9,7 @@ import { Component, inject, signal } from '@angular/core';
 // hier gebraucht, um "?reason=session-expired" aus der URL zu lesen.
 import { ActivatedRoute, Router } from '@angular/router';
 import { Auth } from '../../core/auth/auth';
+import { errorMessageFor } from '../../core/http-error-message';
 
 @Component({
   selector: 'app-login',
@@ -75,12 +76,20 @@ export class Login {
         this.isSubmitting.set(false);
         this.router.navigateByUrl('/dashboard');
       },
-      error: () => {
-        // Bewusst dieselbe generische Meldung, egal ob Email unbekannt oder
+      error: (error: unknown) => {
+        // 401: bewusst dieselbe Meldung, egal ob E-Mail unbekannt oder
         // Passwort falsch war - das Backend liefert absichtlich keinen
         // Unterschied (Anti-User-Enumeration, siehe Architektur-Doku Abschnitt 6).
+        // Alles andere (Server aus, interner Fehler) ist KEIN falsches
+        // Passwort und bekommt deshalb eine eigene Meldung.
         this.isSubmitting.set(false);
-        this.errorMessage.set('E-Mail oder Passwort ist falsch.');
+        this.errorMessage.set(
+          errorMessageFor(
+            error,
+            { 401: 'E-Mail oder Passwort ist falsch.' },
+            'Anmeldung gerade nicht möglich. Bitte später erneut versuchen.',
+          ),
+        );
       },
     });
   }
