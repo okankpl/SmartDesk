@@ -19,3 +19,20 @@ def test_settings_reject_placeholder_or_short_secret_key(weak_key):
     einem Schluessel gar nicht erst starten ("Fail Fast")."""
     with pytest.raises(ValidationError):
         Settings(database_url=DATABASE_URL, secret_key=weak_key)
+
+
+@pytest.mark.parametrize("uri", ["memory://", "http://example.com", "redis://", ""])
+def test_login_limits_require_shared_redis_storage(uri):
+    with pytest.raises(ValidationError):
+        Settings(database_url=DATABASE_URL, secret_key="a" * 64, login_rate_limit_storage_uri=uri)
+
+
+@pytest.mark.parametrize("field,value", [
+    ("login_rate_limit_ip_attempts", 0),
+    ("login_rate_limit_account_attempts", -1),
+    ("login_rate_limit_ip_window_seconds", 0),
+    ("login_rate_limit_account_window_seconds", 86401),
+])
+def test_login_limits_reject_invalid_budgets(field, value):
+    with pytest.raises(ValidationError):
+        Settings(database_url=DATABASE_URL, secret_key="a" * 64, **{field: value})

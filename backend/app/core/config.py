@@ -1,8 +1,9 @@
 # functools ist Teil der Python-Standardbibliothek (kein externes Package).
 # lru_cache ist ein Decorator, der Funktionsergebnisse zwischenspeichert (Cache).
 from functools import lru_cache
+from urllib.parse import urlsplit
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 
 # pydantic_settings ist ein externes Package (steht in requirements.txt).
 # Aus ihm importieren wir zwei Namen: die Klasse BaseSettings und die Klasse
@@ -54,6 +55,19 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
     # Only the isolated demo stack enables known, documented credentials.
     demo_mode: bool = False
+    login_rate_limit_storage_uri: str = "redis://redis:6379/0"
+    login_rate_limit_ip_attempts: int = Field(default=30, ge=1, le=10000)
+    login_rate_limit_ip_window_seconds: int = Field(default=60, ge=1, le=86400)
+    login_rate_limit_account_attempts: int = Field(default=10, ge=1, le=10000)
+    login_rate_limit_account_window_seconds: int = Field(default=300, ge=1, le=86400)
+
+    @field_validator("login_rate_limit_storage_uri")
+    @classmethod
+    def rate_limit_storage_must_be_shared(cls, value: str) -> str:
+        parsed = urlsplit(value)
+        if parsed.scheme not in {"redis", "rediss"} or not parsed.hostname:
+            raise ValueError("Login rate limits require a redis:// or rediss:// storage URI")
+        return value
 
     # "Fail Fast" beim Start: lieber startet das Backend gar nicht (mit
     # klarer Fehlermeldung), als dass es mit einem erratbaren Schluessel

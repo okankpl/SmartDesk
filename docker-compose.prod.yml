@@ -10,6 +10,18 @@
 #   oder Absturz automatisch wieder mit, ohne dass man das von Hand macht
 # - neuer Service "caddy" fuer HTTPS + Ausliefern des Frontends
 services:
+  redis:
+    image: redis:7.4-alpine
+    command: redis-server --appendonly yes --save "" --maxmemory 64mb --maxmemory-policy noeviction
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -34,6 +46,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     # Ueberschreibt das CMD aus dem Dockerfile (das "--reload" enthaelt, ein
     # reiner Entwicklungs-Komfort: Uvicorn beobachtet dabei staendig
@@ -45,7 +59,7 @@ services:
     # nicht, wohl aber alle URLs, die das Backend selbst erzeugt: die Swagger
     # UI (/api/docs) laedt ihre API-Beschreibung sonst von /openapi.json statt
     # /api/openapi.json - die Anfrage landet beim Frontend, Swagger bleibt leer.
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --root-path /api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --root-path /api --proxy-headers --forwarded-allow-ips=*
 
   caddy:
     image: caddy:2-alpine
@@ -71,5 +85,6 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
   caddy_data:
   caddy_config:

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.deps import get_current_user
+from app.core.login_rate_limit import LoginRateLimiter, get_login_rate_limiter
 from app.core.security import (
     ACCESS_TOKEN_COOKIE_NAME,
     ACCESS_TOKEN_EXPIRE_MINUTES,
@@ -60,10 +61,15 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> User:
     return user
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=TokenResponse, responses={
+    429: {"description": "Login budget exceeded; Retry-After contains seconds until retry."},
+    503: {"description": "Login protection temporarily unavailable; no authentication performed."},
+})
 def login(
+    request: Request,
     response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
+    rate_limiter: LoginRateLimiter = Depends(get_login_rate_limiter),
     db: Session = Depends(get_db),
 ) -> TokenResponse:
     """Prueft Email (im 'username'-Feld) + Passwort, gibt bei Erfolg einen JWT zurueck.
@@ -76,12 +82,17 @@ def login(
     # .strip().lower(): gleiche Normalisierung wie bei der Registrierung, damit
     # "Max@Firma.de " denselben Account findet wie "max@firma.de".
     email = form_data.username.strip().lower()
+    # request.client is supplied by the server, not by an application-read header.
+    rate_limiter.enforce(email, request.client.host if request.client else "unknown")
     user = db.execute(select(User).where(func.lower(User.email) == email)).scalar_one_or_none()
 
     # Bewusst DIESELBE Fehlermeldung fuer "User existiert nicht" UND "Passwort falsch" -
     # sonst koennte ein Angreifer per unterschiedlicher Fehlermeldung rausfinden,
     # welche Emails ueberhaupt registriert sind.
-    invalid_credentials = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Ungültige Anmeldedaten")
+    invalid_credentials = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED, detail="Ungültige Anmeldedaten",
+        headers={"Cache-Control": "no-store"},
+    )
 
     if user is None:
         # Gleiche Meldung allein reicht nicht: bcrypt ist absichtlich langsam
@@ -97,6 +108,7 @@ def login(
         raise invalid_credentials
 
     token = create_access_token(user_id=user.id, role=user.role)
+    response.headers["Cache-Control"] = "no-store"
 
     response.set_cookie(
         key=ACCESS_TOKEN_COOKIE_NAME,

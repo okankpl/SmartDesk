@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.error_handlers import register_error_handlers
+from app.core.login_rate_limit import LoginRateLimiter, get_login_rate_limiter
 
 # "app.routers" ist unser eigener Ordner backend/app/routers/. "tickets" ist die Datei
 # tickets.py darin. Wir importieren das ganze Modul (nicht nur eine Funktion daraus),
@@ -47,6 +48,7 @@ app.add_middleware(
     # mitgesendet/angenommen, wenn Server UND Client das explizit erlauben
     # (hier; im Frontend die passende Gegenstelle: withCredentials).
     allow_credentials=True,
+    expose_headers=["Retry-After"],
 )
 
 # Übersetzt fachliche Fehler aus den Services (z.B. "Statuswechsel nicht
@@ -80,9 +82,12 @@ def health() -> dict[str, str]:
 
 
 @app.get("/health/ready")
-def readiness(db: Session = Depends(get_db)) -> dict[str, str]:
-    """Prüft, ob das Backend wirklich arbeiten kann, also auch die Datenbank
-    erreicht ("Readiness") - anders als /health oben, das nur sagt "der
+def readiness(
+    db: Session = Depends(get_db),
+    rate_limiter: LoginRateLimiter = Depends(get_login_rate_limiter),
+) -> dict[str, str]:
+    """Prüft, ob Datenbank und gemeinsamer Login-Schutz erreichbar sind
+    ("Readiness") - anders als /health oben, das nur sagt "der
     Prozess läuft".
 
     Der Unterschied ist für die Überwachung wichtig: mit falschem Datenbank-
@@ -98,4 +103,6 @@ def readiness(db: Session = Depends(get_db)) -> dict[str, str]:
         db.execute(text("SELECT 1"))
     except SQLAlchemyError:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Datenbank nicht erreichbar")
-    return {"status": "ok", "database": "ok"}
+    if not rate_limiter.check_storage():
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Login-Schutz nicht erreichbar")
+    return {"status": "ok", "database": "ok", "login_protection": "ok"}

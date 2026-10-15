@@ -353,6 +353,28 @@ stateDiagram-v2
 
 **Warum startet das Backend mit schwachem `SECRET_KEY` gar nicht?** Mit dem `SECRET_KEY` werden alle JWTs signiert. Wer ihn kennt, kann sich selbst gültige Tokens für beliebige Nutzer ausstellen – auch mit Admin-Rolle. Der Platzhalter aus `.env.example` steht öffentlich im Repository; wird er versehentlich übernommen, fällt das im Betrieb niemandem auf. `Settings` ([config.py](../backend/app/core/config.py)) lehnt den Platzhalter und Schlüssel unter 32 Zeichen deshalb beim Start ab (**Fail Fast**). `decode_access_token` akzeptiert außerdem nur den fest eingestellten Algorithmus `HS256` – ein Token mit Algorithmus `"none"` (gar keine Signatur, ein bekannter JWT-Angriff) wird abgelehnt.
 
+### Login-Drosselung
+
+[LoginRateLimiter](../backend/app/core/login_rate_limit.py) prüft vor Nutzerabfrage und bcrypt zwei unabhängige Budgets: Quell-IP und normalisierte E-Mail-Adresse. Das E-Mail-Budget gilt auch bei wechselnden IPs und für nicht registrierte Adressen. Beide zählen **alle** Login-Anfragen, auch erfolgreiche; ein Erfolg setzt sie nicht zurück. Eine Anfrage verbraucht ihr IP-Budget auch dann, wenn anschließend das E-Mail-Budget ablehnt.
+
+[`limits`](https://limits.readthedocs.io/en/stable/strategies.html#moving-window) stellt die Moving-Window-Strategie bereit; Redis koordiniert sie atomar über Backend-Prozesse hinweg. HMAC-SHA256-Ableitungen aus IP/E-Mail und `SECRET_KEY` stehen statt Klartextwerten in kurzlebigen Redis-Schlüsseln. Ein Schlüsselwechsel erzeugt neue Zähleridentitäten; alte Einträge laufen aus.
+
+| Einstellung | Standard | Lokale Demo |
+| --- | --- | --- |
+| `LOGIN_RATE_LIMIT_IP_ATTEMPTS` | 30 | 120 |
+| `LOGIN_RATE_LIMIT_IP_WINDOW_SECONDS` | 60 Sekunden | 60 Sekunden |
+| `LOGIN_RATE_LIMIT_ACCOUNT_ATTEMPTS` | 10 | 60 |
+| `LOGIN_RATE_LIMIT_ACCOUNT_WINDOW_SECONDS` | 300 Sekunden | 300 Sekunden |
+| `LOGIN_RATE_LIMIT_STORAGE_URI` | `redis://redis:6379/0` | Eigener Demo-Redis |
+
+`429` enthält `Retry-After` in ganzen Sekunden. Abgelehnte Versuche werden nicht in das volle Moving Window aufgenommen und verlängern dessen Wartezeit nicht. Redis-Fehler ergeben `503` mit `Retry-After: 30`, keine unbegrenzte Ausweichlösung im Prozessspeicher. Erfolgreiche Logins, `401`-Antworten und Fehler des Begrenzers tragen `Cache-Control: no-store`. `/health/ready` prüft PostgreSQL und Redis-Erreichbarkeit; ein Ping ist kein umfassender Schreib-/Lasttest.
+
+Die Oberfläche erhält E-Mail und Passwort, sperrt Submits während der Wartezeit und räumt den Timer beim Verlassen auf. Ein Browser-Reload entfernt keine serverseitigen Zähler. Aktive Sitzungen und Logout unterliegen dem Loginbudget nicht.
+
+**Proxy-Vertrauen:** Caddy überschreibt `X-Forwarded-For` mit dem direkten Verbindungspeer. Nur die internen Demo-/Produktionsbackends akzeptieren diese durch Caddy gesetzten Header; sie veröffentlichen keinen Hostport. Der direkt erreichbare Entwicklungsserver startet mit `--no-proxy-headers`. Die Anwendung liest keine frei gelieferten IP-Header. Ein zusätzlicher CDN/Proxy benötigt eine eigene Prüfung der Vertrauenskette, siehe [Caddy-Dokumentation](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy#headers).
+
+**Grenzen:** Ein Angreifer kann das Budget einer bekannten E-Mail vorübergehend verbrauchen und legitime Logins verzögern. Es gibt keine permanente Sperre im Nutzer, aber auch keinen gesonderten Wiederherstellungsweg. Die [OWASP-Empfehlungen zu Login-Throttling](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html#login-throttling) erläutern diese Abwägung. Verteiltes Password-Spraying über viele IPs und Konten, Registrierung, MFA und allgemeiner DDoS-Schutz sind nicht vollständig gelöst. Redis läuft intern mit Speicherlimit, `noeviction` und AOF-Volume. Ein harter Ausfall kann jüngste Zählerstände verlieren; das Löschen des Volumes setzt sie zurück. Die Konfiguration setzt einen vertrauenswürdigen internen Compose-Verbund voraus, kein öffentliches Redis.
+
 ### Wie der Token im Browser gespeichert wird: HttpOnly-Cookie statt localStorage
 
 Eine SPA muss den JWT irgendwo zwischen Login und jeder folgenden Anfrage aufbewahren. Zwei verbreitete Optionen und die Abwägung dahinter:
@@ -505,7 +527,7 @@ Ehrlich zu benennen, was fehlt, ist selbst ein Qualitätsmerkmal. Hier die aktue
 | Lücke | Warum sie (noch) offen ist | Wie man sie in echt schließt |
 |---|---|---|
 | ~~`/users`-Endpunkte ungeschützt, keine E-Mail-/Passwort-Prüfung~~ | – | erledigt, siehe [Security-Review](#security-review-funde-und-behebungen) |
-| Keine Begrenzung der Login-Versuche (Rate Limiting) | Braucht zusätzliche Infrastruktur (Zähler pro IP/Konto, z.B. in Redis) | Rate Limiting im Backend (z.B. `slowapi`) oder im Reverse Proxy, zusätzlich temporäre Kontosperre nach mehreren Fehlversuchen |
+| Missbrauchsschutz über den Login hinaus | Login hat Redis-gestützte Moving Windows; Registrierung und verteiltes Password-Spraying brauchen zusätzliche Regeln | Registrierungsschutz, Monitoring und Kontowiederherstellung planen; Risiko gezielt verbrauchter E-Mail-Budgets bleibt |
 | `POST /auth/register` verrät per `409`, dass eine E-Mail bereits registriert ist | Bewusster Kompromiss zugunsten einer direkten, verständlichen Rückmeldung | Registrierung immer mit derselben Antwort bestätigen und das Ergebnis per E-Mail mitteilen (braucht E-Mail-Versand) |
 | Versionsschutz ist für direkte API-Clients optional | Die Oberfläche verwendet `expected_version`; bestehende API-Clients dürfen das Feld noch weglassen | Bei einer späteren API-Version bedingte Änderungen verbindlich machen; siehe [Versionsentscheidung](entscheidungen-workflow-und-historie.md#gleichzeitige-änderungen) |
 | Kein Token-Widerruf (nur `/auth/logout`, das löscht den Cookie, der JWT bleibt bis zum Ablauf technisch gültig) | JWTs sind zustandslos per Design (siehe Abschnitt 3) – echter Widerruf widerspricht dem Grundprinzip | entweder kurze Ablaufzeiten + Refresh-Token-Flow, oder eine serverseitige Blockliste für widerrufene Tokens |
@@ -532,7 +554,7 @@ Ehrlich zu benennen, was fehlt, ist selbst ein Qualitätsmerkmal. Hier die aktue
 10. ~~Registrierungs-Seite im Frontend~~ – erledigt: `/register`, Validierung und Rückkehr zur Anmeldung
 11. ~~Frontend- und HTTP-Integrationstests~~ – erledigt: Angular-Komponenten/Services, PostgreSQL-Workflows mit `TestClient`, konkurrierende Übernahmen und Playwright auf Desktop/Mobile; drei CI-Workflows
 12. ~~Vorführbare lokale Demo~~ – erledigt: ein Compose-Befehl, drei Rollen, zwölf Beispieltickets, Screenshots und dokumentierte Grenzen
-13. Login-Rate-Limiting, E-Mail-Verifikation/Passwort-Reset und Token-Widerruf
+13. Login-Rate-Limiting ist umgesetzt; als Nächstes E-Mail-Verifikation/Passwort-Reset, Registrierungsschutz und Token-Widerruf
 14. ~~Ticket-Inhalte über die Oberfläche bearbeiten~~ – erledigt: Editor mit Validierung, Versionsschutz, Entwurfsbestätigung und Tests
 15. Serverseitige Suche und Pagination
 16. Öffentliches HTTPS-Deployment mit eigener Konfiguration, Betrieb und Überwachung

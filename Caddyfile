@@ -55,7 +55,10 @@
 		request_body {
 			max_size 1MB
 		}
-		reverse_proxy backend:8000
+		reverse_proxy backend:8000 {
+			# Single public edge: never trust a client-supplied forwarding chain.
+			header_up X-Forwarded-For {remote_host}
+		}
 	}
 
 	# Alles andere: die gebaute Angular-App als statische Dateien ausliefern.

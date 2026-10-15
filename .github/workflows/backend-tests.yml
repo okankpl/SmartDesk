@@ -14,6 +14,13 @@ jobs:
     permissions:
       contents: read
     services:
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
       postgres:
         image: postgres:16-alpine
         env:
@@ -34,6 +41,8 @@ jobs:
       DATABASE_URL: postgresql+psycopg://test:test@localhost:5432/smartdesk_test
       TEST_DATABASE_URL: postgresql+psycopg://test:test@localhost:5432/smartdesk_test
       SECRET_KEY: ci-test-secret-key-not-for-production
+      LOGIN_RATE_LIMIT_STORAGE_URI: redis://localhost:6379/0
+      TEST_REDIS_URL: redis://localhost:6379/0
 
     steps:
       # Laedt den Repo-Inhalt in die virtuelle Maschine, die diesen Job ausfuehrt.

@@ -52,6 +52,7 @@ API-Dokumentation in der Demo: [localhost:8080/api/docs](http://localhost:8080/a
 - **Bearbeitung ohne Kontextverlust:** Statuswechsel und Zuweisungen halten den Detaildialog offen; ein Kommentarentwurf bleibt dabei erhalten. Beschreibung, Kommentare und Verlauf scrollen gemeinsam, während Kopf und Aktionsleiste sichtbar bleiben.
 - **Inhalte bearbeiten:** Support und Administration ändern Titel, Beschreibung und Priorität direkt im Detaildialog. Der Editor schützt vor dem Verwerfen ungespeicherter Änderungen und erkennt veraltete Ticketversionen. Fehlgeschlagene Speicherungen erhalten den Entwurf; erfolgreiche Änderungen erscheinen in der Historie.
 - **Konten:** Registrierung und Anmeldung, bcrypt-Passwörter, JWT im HttpOnly-Cookie, Wiederherstellung und Ablauf einer Sitzung.
+- **Login-Schutz:** gemeinsame Redis-Zähler pro IP und normalisierter E-Mail, auch über mehrere Backend-Prozesse. Bei ausgeschöpftem Budget zeigt die Anmeldung eine Wartezeit; ein Ausfall des Schutzdienstes erlaubt keine unbegrenzten Login-Versuche.
 - **Betrieb:** automatisierte Migrationen, getrennte Demo-/Test-/Produktionskonfiguration, Non-root-Backend, Caddy, Readiness-Check und Backup-/Deployment-Skripte.
 
 ![SmartDesk: Ticketdetail mit Kommentaren und Änderungshistorie](docs/images/ticket-detail.png)
@@ -66,6 +67,7 @@ flowchart LR
     API --> Rules[Rollen / Workflow / Zuweisung]
     API --> ORM[SQLAlchemy]
     ORM --> DB[(PostgreSQL)]
+    API --> Redis[(Redis / Loginbudgets)]
     Migrations[Alembic] --> DB
 ```
 
@@ -78,19 +80,20 @@ flowchart LR
 | Gemeinsame Transaktion für Ticket und Ereignis | Fehlgeschlagene Aktionen hinterlassen keinen scheinbar erfolgreichen Historieneintrag. |
 | Versionsprüfung bei Inhaltsänderungen | Der Editor sendet die gelesene Ticketversion mit. Ein veralteter Stand wird unter derselben Zeilensperre mit `409` abgewiesen, ohne neuere Inhalte oder die Historie zu überschreiben. |
 | Explizite Demo-Befüllung | Bekannte Demo-Zugangsdaten entstehen nur bei `DEMO_MODE=true`, getrennt von der produktiven Konfiguration. |
+| Login-Drosselung mit `limits` und Redis | Atomare Moving-Window-Zähler gelten pro IP und E-Mail unabhängig vom Backend-Prozess. Keine Klartext-E-Mails/IPs in Redis-Schlüsseln; keine dauerhafte Kontosperre. |
 | Bedarfsgesteuertes Frontend | Seiten werden als eigene Route-Chunks geladen. Filter, Kennzahlen und Ticketvorschau sind eigenständige Präsentationskomponenten; der Detaildialog lädt Kommentare und Historie erst beim Öffnen. |
 
 Die vollständige [Architektur und Spezifikation](docs/architektur-und-konzepte.md), die [Entscheidungen zu Zuständigkeit und Historie](docs/entscheidungen-workflow-und-historie.md) und die [Deployment-Anleitung](docs/deployment.md) beschreiben Details und Grenzen.
 
 ## Qualität prüfen
 
-Backend einschließlich Migrationen, Modelldrift, Unit-/HTTP-Tests, konkurrierender Übernahmen und Ruff, mit einer separaten Testdatenbank:
+Backend einschließlich Migrationen, Modelldrift, Unit-/HTTP-Tests, konkurrierender Änderungen, Redis-Rate-Limits und Ruff, mit separaten PostgreSQL-/Redis-Testdiensten:
 
 ```bash
 docker compose -f docker-compose.demo.yml --profile test run --build --rm tests
 ```
 
-Die Tests verändern keine Demo-Daten. Die PostgreSQL-Integrationstests benötigen eine explizite `TEST_DATABASE_URL` mit Datenbankname auf `_test`; ohne diese werden sie lokal übersprungen. Die CI führt sie immer aus.
+Die Tests verändern keine Demo-Daten. PostgreSQL-Integrationstests benötigen eine explizite `TEST_DATABASE_URL` mit Datenbankname auf `_test`, Redis-Integrationstests `TEST_REDIS_URL`; ohne diese werden die jeweiligen Tests lokal übersprungen. Die CI führt beide aus.
 
 Frontend, mit **Node.js 24** (siehe `frontend/.nvmrc`):
 
@@ -152,7 +155,9 @@ docs/                  Spezifikation, Architektur und Betriebsanleitung
 
 ## Grenzen und weitere Arbeit
 
-SmartDesk ist ein vorführbares Entwicklungs- und Portfolio-Projekt. Ein öffentliches Live-Deployment ist hier nicht vorausgesetzt. Für einen Einsatz mit echten Nutzerdaten stehen insbesondere Login-Rate-Limiting, E-Mail-Verifikation/Passwort-Reset, Token-Widerruf und serverseitige Pagination aus. Die Suche filtert aktuell die bereits rollenbeschränkt geladene Ticketliste im Browser. Die Oberfläche sendet bei Inhaltsänderungen und Zuweisungen immer `expected_version`; direkte API-Clients können dieses Feld aus Kompatibilitätsgründen noch weglassen und erhalten dann keinen Schutz vor veralteten Eingaben.
+SmartDesk ist ein vorführbares Entwicklungs- und Portfolio-Projekt. Ein öffentliches Live-Deployment ist hier nicht vorausgesetzt. Für einen Einsatz mit echten Nutzerdaten stehen insbesondere E-Mail-Verifikation/Passwort-Reset, Token-Widerruf, Missbrauchsschutz für Registrierung und serverseitige Pagination aus. Die Suche filtert aktuell die bereits rollenbeschränkt geladene Ticketliste im Browser. Die Oberfläche sendet bei Inhaltsänderungen und Zuweisungen immer `expected_version`; direkte API-Clients können dieses Feld aus Kompatibilitätsgründen noch weglassen und erhalten dann keinen Schutz vor veralteten Eingaben.
+
+Der Login erlaubt standardmäßig 30 Anfragen pro IP in 60 Sekunden und 10 pro normalisierter E-Mail in 300 Sekunden, einschließlich erfolgreicher Anmeldungen. Die lokale Demo nutzt 120 beziehungsweise 60, damit gemeinsam verwendete Testkonten vorführbar bleiben. `429` enthält `Retry-After`, bei Redis-Ausfall antwortet der Login mit `503`. Aktive Sitzungen bleiben nutzbar. Ein Angreifer kann das Budget einer bekannten E-Mail vorübergehend verbrauchen; es gibt noch keinen gesonderten Kontowiederherstellungsweg. Konfiguration und Betriebsgrenzen stehen in der [Architektur](docs/architektur-und-konzepte.md#login-drosselung) und der [Betriebsanleitung](docs/deployment.md).
 
 Die Historie ist über die API nur lesbar und beginnt für bestehende Tickets mit Änderungen nach ihrer Einführung. Sie ist kein revisionssicheres Archiv: Datenbank-Administratoren können Daten ändern, und ein Admin kann ein Ticket samt Kommentaren und Historie löschen. [Weitere bewusste Einschränkungen](docs/architektur-und-konzepte.md#9-bewusste-einschränkungen--offene-punkte).
 

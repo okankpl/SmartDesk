@@ -21,16 +21,33 @@ class UnreachableDatabase:
         raise OperationalError("SELECT 1", {}, Exception("connection refused"))
 
 
+class LoginProtection:
+    def __init__(self, reachable=True):
+        self.reachable = reachable
+
+    def check_storage(self):
+        return self.reachable
+
+
 def test_liveness_does_not_need_the_database():
     assert health() == {"status": "ok"}
 
 
 def test_readiness_reports_ok_when_database_answers():
-    assert readiness(db=ReachableDatabase()) == {"status": "ok", "database": "ok"}
+    assert readiness(db=ReachableDatabase(), rate_limiter=LoginProtection()) == {
+        "status": "ok", "database": "ok", "login_protection": "ok",
+    }
 
 
 def test_readiness_returns_503_when_database_is_unreachable():
     with pytest.raises(HTTPException) as exc_info:
-        readiness(db=UnreachableDatabase())
+        readiness(db=UnreachableDatabase(), rate_limiter=LoginProtection())
 
     assert exc_info.value.status_code == 503
+
+
+def test_readiness_reports_unavailable_login_protection():
+    with pytest.raises(HTTPException) as exc_info:
+        readiness(db=ReachableDatabase(), rate_limiter=LoginProtection(False))
+    assert exc_info.value.status_code == 503
+    assert "Login-Schutz" in exc_info.value.detail

@@ -52,6 +52,29 @@ test('demo queue, filters, named comments and responsive ticket details', async 
   expect(errors).toEqual([]);
 });
 
+test('login throttling preserves inputs and permits retry after the cooldown', async ({ page }, testInfo) => {
+  let intercepted = false;
+  await page.route('**/api/auth/login', async route => {
+    if (intercepted) return route.continue();
+    intercepted = true;
+    await route.fulfill({ status: 429, contentType: 'application/json',
+      headers: { 'Retry-After': '2' }, body: JSON.stringify({ detail: 'Zu viele Anmeldeversuche' }) });
+  });
+  await page.goto('/login');
+  await page.getByLabel('E-Mail', { exact: true }).fill('agent@example.com');
+  await page.getByLabel('Passwort', { exact: true }).fill(password);
+  await page.getByRole('button', { name: 'Anmelden', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Zu viele Anmeldeversuche');
+  await expect(page.locator('button[type=submit]')).toBeDisabled();
+  await expect(page.getByLabel('E-Mail', { exact: true })).toHaveValue('agent@example.com');
+  await expect(page.getByLabel('Passwort', { exact: true })).toHaveValue(password);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(() => innerWidth));
+  await page.screenshot({ path: path.resolve(`../tmp/login-throttle-${testInfo.project.name}.png`) });
+  await expect(page.getByRole('button', { name: 'Anmelden', exact: true })).toBeEnabled({ timeout: 5000 });
+  await page.getByRole('button', { name: 'Anmelden', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
+});
+
 test('employee creates and comments, agent claims and resolves, admin closes', async ({ page }, testInfo) => {
   const title = `E2E ${testInfo.project.name} ${Date.now()}`;
   let ticketId: number | undefined;

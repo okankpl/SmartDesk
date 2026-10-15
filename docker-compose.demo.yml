@@ -10,8 +10,22 @@ x-backend: &backend
     DEMO_MODE: "true"
     COOKIE_SECURE: "false"
     FRONTEND_ORIGIN: http://localhost:8080
+    LOGIN_RATE_LIMIT_STORAGE_URI: redis://redis:6379/0
+    LOGIN_RATE_LIMIT_IP_ATTEMPTS: "120"
+    LOGIN_RATE_LIMIT_ACCOUNT_ATTEMPTS: "60"
 
 services:
+  redis:
+    image: redis:7.4-alpine
+    command: redis-server --appendonly yes --save "" --maxmemory 64mb --maxmemory-policy noeviction
+    volumes:
+      - demo_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -35,10 +49,12 @@ services:
 
   backend:
     <<: *backend
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --root-path /api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --root-path /api --proxy-headers --forwarded-allow-ips=*
     depends_on:
       setup:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"]
       interval: 5s
@@ -72,10 +88,24 @@ services:
       DATABASE_URL: postgresql+psycopg://demo:local-demo-only@test-postgres:5432/smartdesk_test
       TEST_DATABASE_URL: postgresql+psycopg://demo:local-demo-only@test-postgres:5432/smartdesk_test
       SECRET_KEY: isolated-integration-test-signing-key-2026
+      LOGIN_RATE_LIMIT_STORAGE_URI: redis://test-redis:6379/0
+      TEST_REDIS_URL: redis://test-redis:6379/0
     command: sh -c "alembic upgrade head && alembic check && pytest -v -p no:cacheprovider && ruff check --no-cache ."
     depends_on:
       test-postgres:
         condition: service_healthy
+      test-redis:
+        condition: service_healthy
+
+  test-redis:
+    profiles: ["test"]
+    image: redis:7.4-alpine
+    command: redis-server --save "" --appendonly no
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
 
   test-postgres:
     profiles: ["test"]
@@ -94,3 +124,4 @@ services:
 
 volumes:
   demo_data:
+  demo_redis_data:

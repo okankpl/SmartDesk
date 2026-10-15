@@ -14,9 +14,12 @@ flowchart LR
     Caddy -->|"/api/*"| Backend[Backend-Container<br/>FastAPI]
     Caddy -->|alles andere| Static[Statische Angular-Dateien]
     Backend --> Postgres[(Postgres-Container)]
+    Backend --> Redis[(Redis: Login-Zähler)]
 ```
 
-Ein einziger Server, drei Docker-Container (Caddy, Backend, Postgres) plus die fertig gebauten Angular-Dateien, die Caddy direkt ausliefert. Caddy ist gleichzeitig Reverse Proxy (leitet `/api/*` ans Backend weiter) und Webserver für die statische Angular-App – und holt sich automatisch ein gültiges HTTPS-Zertifikat von Let's Encrypt, sobald eine echte Domain konfiguriert ist.
+Ein einziger Server, vier Docker-Container (Caddy, Backend, Postgres, Redis) plus die fertig gebauten Angular-Dateien. Caddy liefert diese Dateien aus, leitet `/api/*` ans Backend und holt bei einer echten Domain automatisch ein HTTPS-Zertifikat. Redis hält Loginbudgets gemeinsam für die Backend-Prozesse und ersetzt PostgreSQL nicht.
+
+Backend, PostgreSQL und Redis veröffentlichen keine Hostports. Caddy überschreibt `X-Forwarded-For` mit dem direkten Clientpeer; das interne Backend akzeptiert diese Proxyheader. `--forwarded-allow-ips=*` ist **nur zusammen mit dieser internen Netzgrenze** vorgesehen. Ein direkt erreichbares Backend oder ein vorgeschaltetes CDN verlangt eine neue Prüfung der Vertrauenskette. Der Entwicklungsserver vertraut keinen Proxyheadern.
 
 **Warum ein Server für beides statt getrennter Dienste?** Damit Frontend und Backend aus Browser-Sicht dieselbe Origin sind (keine unterschiedliche Domain/Port) – das vermeidet CORS und macht den Auth-Cookie trivial "same-site", ganz ohne die Cross-Origin-Konfiguration, die für getrennte Origins nötig wäre.
 
@@ -92,6 +95,13 @@ FRONTEND_ORIGIN=https://smartdesk.example.com
 COOKIE_SECURE=true
 # Die bekannten lokalen Demo-Konten dürfen nicht automatisch angelegt werden.
 DEMO_MODE=false
+
+# Redis nur intern, keinen öffentlichen Hostport öffnen.
+LOGIN_RATE_LIMIT_STORAGE_URI=redis://redis:6379/0
+LOGIN_RATE_LIMIT_IP_ATTEMPTS=30
+LOGIN_RATE_LIMIT_IP_WINDOW_SECONDS=60
+LOGIN_RATE_LIMIT_ACCOUNT_ATTEMPTS=10
+LOGIN_RATE_LIMIT_ACCOUNT_WINDOW_SECONDS=300
 ```
 
 `token_hex` erzeugt nur Ziffern und die Buchstaben a–f. Das ist bei `POSTGRES_PASSWORD` wichtig: Zeichen wie `@`, `/` oder `:` hätten in `DATABASE_URL` eine eigene Bedeutung und müssten dort zusätzlich URL-kodiert werden.
@@ -102,6 +112,10 @@ DOMAIN=smartdesk.example.com
 ```
 
 Das Backend prüft den `SECRET_KEY` beim Start: mit dem Platzhalter aus `.env.example` oder einem Wert unter 32 Zeichen startet es absichtlich nicht (siehe Troubleshooting). So kann ein vergessener Platzhalter nicht unbemerkt in Produktion landen.
+
+Die Loginlimits zählen erfolgreiche und erfolglose Anfragen. Bei Firmen-NAT teilen sich Nutzer das IP-Budget; die Werte müssen zur Last passen. `429` liefert die Wartezeit, Redis-Ausfälle führen beim Login zu `503`; bestehende Sitzungen bleiben verwendbar. Ein bekanntes E-Mail-Budget kann absichtlich verbraucht werden; noch gibt es keinen Passwort-Reset als Ausweichweg. Details: [Login-Drosselung](architektur-und-konzepte.md#login-drosselung).
+
+Redis hat ein AOF-Volume, ein 64-MB-Speicherlimit und `noeviction`: Bei Speichermangel scheitern Schreibversuche, statt Schutzschlüssel still zu entfernen. Normale Neustarts erhalten das Volume. `down -v` entfernt dagegen Datenbank- und Redis-Volumes und ist kein Updateschritt. Ein Readiness-Ping garantiert keine Schreibfähigkeit bei vollem Speicher. Entferntes Redis verlangt zusätzlich TLS/Authentifizierung und beschränkten Netzwerkzugriff.
 
 ## Schritt 7: Frontend bauen
 
@@ -180,7 +194,9 @@ Unter Windows/PowerShell statt `DOMAIN=localhost ...` vorher `$env:DOMAIN = "loc
 |---|---|
 | Zertifikat wird nicht ausgestellt / Caddy-Logs zeigen Timeout | DNS zeigt noch nicht (richtig) auf die Server-IP, oder Port 80/443 ist irgendwo blockiert (Cloud-Firewall vs. `ufw` – beide prüfen) |
 | `502 Bad Gateway` von Caddy | Backend-Container läuft nicht/ist noch am Starten - `docker compose -f docker-compose.prod.yml ps` und `logs backend` prüfen |
-| `/api/health` sagt `ok`, aber `/api/health/ready` gibt `503` und jede echte Anfrage `500` | Backend kommt nicht an die Datenbank – meist passt das Passwort in `DATABASE_URL` nicht zu `POSTGRES_PASSWORD` (siehe Schritt 6). Achtung: Postgres übernimmt `POSTGRES_PASSWORD` nur beim allerersten Start mit leerem Volume, ein späteres Ändern in `.env` ändert das Passwort in der Datenbank NICHT |
+| `/api/health` sagt `ok`, aber `/api/health/ready` gibt `503` | Antwortdetail prüfen: PostgreSQL oder Redis ist nicht erreichbar. Datenbank-Zugangsdaten beziehungsweise `LOGIN_RATE_LIMIT_STORAGE_URI` und Redis-Logs prüfen. Eine geänderte `.env` ändert kein Passwort in einem bestehenden PostgreSQL-Volume. |
+| Login liefert `429` | `Retry-After` beachten; Grenzwerte, gemeinsam verwendete Konten und Firmen-NAT prüfen. Keine Redis-Volumes als reguläre Entsperrung löschen. |
+| Login liefert `503`, Redis-Ping funktioniert | Redis-Schreibfehler, Speicherlimit und Logs prüfen. Es gibt absichtlich keinen unbegrenzten In-Memory-Fallback. |
 | Backend startet nicht, Log zeigt `SECRET_KEY ist der Platzhalter ...` | `SECRET_KEY` in `.env` ist noch der Beispielwert oder zu kurz – neuen Wert erzeugen (siehe Schritt 6), danach `docker compose -f docker-compose.prod.yml up -d backend` |
 | Swagger UI unter `/api/docs` bleibt leer ("Failed to load API definition") | Backend läuft ohne `--root-path /api` (siehe `command` in `docker-compose.prod.yml`) und sucht die API-Beschreibung deshalb unter `/openapi.json` statt `/api/openapi.json` |
 | Login funktioniert, aber Cookie kommt nicht an | `FRONTEND_ORIGIN`/`COOKIE_SECURE` in `.env` stimmen nicht mit der echten Domain überein, oder Seite wurde über `http://` statt `https://` aufgerufen |

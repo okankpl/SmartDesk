@@ -16,7 +16,7 @@ set -euo pipefail
 # wurde, sonst den Wert nach dem ":-" als Standardwert - so funktioniert das
 # Skript auch ohne Argument (mit einem sinnvollen Default) UND laesst sich bei
 # Bedarf gegen eine andere URL testen: ./scripts/healthcheck.sh https://andere-domain/api/health/ready
-# /health/ready statt /health: nur ersteres prueft auch die Datenbank - /health
+# /health/ready prueft auch Datenbank und Redis-Erreichbarkeit; /health
 # meldet "ok", solange der Prozess laeuft, selbst wenn jede echte Anfrage scheitert.
 URL="${1:-https://smartdesk.example.com/api/health/ready}"
 

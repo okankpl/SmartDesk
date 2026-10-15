@@ -5,8 +5,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
+from limits.storage import MemoryStorage
 
+from app.core.config import get_settings
 from app.core.database import get_db
+from app.core.login_rate_limit import LoginRateLimiter, get_login_rate_limiter
 from app.main import app
 
 
@@ -40,8 +43,11 @@ def client(db):
         yield db
 
     app.dependency_overrides[get_db] = override_db
+    limiter = LoginRateLimiter(get_settings(), MemoryStorage())
+    app.dependency_overrides[get_login_rate_limiter] = lambda: limiter
     try:
         with TestClient(app) as api:
             yield api
     finally:
         app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(get_login_rate_limiter, None)

@@ -11,7 +11,7 @@
         <button type="button" class="password-toggle" [attr.aria-label]="passwordVisible() ? 'Passwort verbergen' : 'Passwort anzeigen'" [title]="passwordVisible() ? 'Passwort verbergen' : 'Passwort anzeigen'" [attr.aria-pressed]="passwordVisible()" (click)="passwordVisible.set(!passwordVisible())">@if (passwordVisible()) { <svg lucideEyeOff [size]="17"></svg> } @else { <svg lucideEye [size]="17"></svg> }</button>
       </div></div>
       @if (errorMessage()) { <p class="error" role="alert">{{ errorMessage() }}</p> }
-      <button type="submit" class="button button--primary auth-submit" [disabled]="isSubmitting()">{{ isSubmitting() ? 'Wird geprüft…' : 'Anmelden' }}<svg lucideArrowRight [size]="17"></svg></button>
+      <button type="submit" class="button button--primary auth-submit" [disabled]="isSubmitting() || retryAfterSeconds() > 0">{{ isSubmitting() ? 'Wird geprüft…' : retryAfterSeconds() > 0 ? 'Erneut in ' + retryAfterSeconds() + ' s' : 'Anmelden' }}<svg lucideArrowRight [size]="17"></svg></button>
       <p class="auth-link">Noch kein Konto? <a routerLink="/register">Registrieren</a></p>
     </form>
   </div>

@@ -6,6 +6,7 @@ psycopg[binary]>=3.2
 pydantic-settings>=2.5
 bcrypt>=4.2
 pyjwt>=2.9
+limits[redis]==5.8.0
 # Wird von FastAPIs OAuth2PasswordRequestForm gebraucht (Login-Formular-Daten,
 # nicht JSON), nicht direkt in unserem Code importiert.
 python-multipart>=0.0.12

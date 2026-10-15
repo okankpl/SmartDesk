@@ -29,7 +29,7 @@ USER appuser
 # gebraucht, also abschalten statt dem Benutzer Schreibrechte zu geben.
 ENV PYTEST_ADDOPTS="-p no:cacheprovider"
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--no-proxy-headers"]
 
 FROM runtime AS development
 USER root

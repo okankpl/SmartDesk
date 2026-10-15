@@ -4,7 +4,8 @@
 // Komponente benutzt werden kann. inject() holt einen per Dependency
 // Injection registrierten Service (hier: Auth, Router). signal() erzeugt
 // einen reaktiven Wert-Container (siehe Kommentare in core/auth/auth.ts).
-import { Component, inject, signal } from '@angular/core';
+import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 // ActivatedRoute beschreibt die gerade aktive Route samt URL-Parametern -
 // hier gebraucht, um "?reason=session-expired" aus der URL zu lesen.
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -27,6 +28,8 @@ export class Login {
   private readonly auth = inject(Auth);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
+  private readonly destroyRef = inject(DestroyRef);
+  private cooldownTimer: ReturnType<typeof setInterval> | undefined;
 
   // true, wenn man wegen einer abgelaufenen Sitzung hierher umgeleitet wurde
   // (siehe session-expired-interceptor.ts). "snapshot" ist der Stand der URL
@@ -46,6 +49,28 @@ export class Login {
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly isSubmitting = signal(false);
   protected readonly passwordVisible = signal(false);
+  protected readonly retryAfterSeconds = signal(0);
+
+  constructor() {
+    this.destroyRef.onDestroy(() => clearInterval(this.cooldownTimer));
+  }
+
+  private startCooldown(error: unknown): void {
+    if (!(error instanceof HttpErrorResponse) || ![429, 503].includes(error.status)) return;
+    const header = error.headers.get('Retry-After') ?? '';
+    const parsed = Number(header);
+    const seconds = /^\d+$/.test(header) && Number.isSafeInteger(parsed) && parsed > 0
+      ? Math.min(parsed, 86400) : 30;
+    const deadline = Date.now() + seconds * 1000;
+    clearInterval(this.cooldownTimer);
+    this.retryAfterSeconds.set(seconds);
+    this.cooldownTimer = setInterval(() => {
+      // Use elapsed time so background-tab timer throttling cannot extend the wait.
+      const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      this.retryAfterSeconds.set(remaining);
+      if (remaining === 0) clearInterval(this.cooldownTimer);
+    }, 1000);
+  }
 
   // Wird bei jedem Tastendruck im E-Mail-Feld aufgerufen (siehe (input)-Bindung
   // in login.html). event.target ist laut TypeScript nur ein generisches
@@ -63,7 +88,7 @@ export class Login {
     // Verhindert den nativen Formular-Submit (kompletter Seiten-Reload) -
     // stattdessen soll Angular die Anfrage per HttpClient im Hintergrund senden.
     event.preventDefault();
-    if (this.isSubmitting()) return;
+    if (this.isSubmitting() || this.retryAfterSeconds() > 0) return;
 
     this.errorMessage.set(null);
     this.isSubmitting.set(true);
@@ -85,10 +110,15 @@ export class Login {
         // Alles andere (Server aus, interner Fehler) ist KEIN falsches
         // Passwort und bekommt deshalb eine eigene Meldung.
         this.isSubmitting.set(false);
+        this.startCooldown(error);
         this.errorMessage.set(
           errorMessageFor(
             error,
-            { 401: 'E-Mail oder Passwort ist falsch.' },
+            {
+              401: 'E-Mail oder Passwort ist falsch.',
+              429: 'Zu viele Anmeldeversuche. Bitte warte und versuche es danach erneut.',
+              503: 'Anmeldung vorübergehend nicht verfügbar. Bitte versuche es später erneut.',
+            },
             'Anmeldung gerade nicht möglich. Bitte später erneut versuchen.',
           ),
         );

@@ -42,7 +42,10 @@ function submitCredentials(root: HTMLElement): void {
 }
 
 describe('Login', () => {
-  afterEach(() => TestBed.inject(HttpTestingController).verify());
+  afterEach(() => {
+    TestBed.inject(HttpTestingController).verify();
+    vi.useRealTimers();
+  });
 
   it('zeigt einen Hinweis, wenn man wegen abgelaufener Sitzung umgeleitet wurde', () => {
     const root = createLogin({ reason: 'session-expired' }).nativeElement as HTMLElement;
@@ -82,5 +85,60 @@ describe('Login', () => {
     const message = root.querySelector('[role=alert]')?.textContent ?? '';
     expect(message).toContain('Server nicht erreichbar');
     expect(message).not.toContain('Passwort');
+  });
+
+  it('beachtet Retry-After, erhält Eingaben und verhindert Anfragen während der Wartezeit', () => {
+    vi.useFakeTimers();
+    const fixture = createLogin();
+    const root = fixture.nativeElement as HTMLElement;
+    const http = TestBed.inject(HttpTestingController);
+    submitCredentials(root);
+    http.expectOne(`${API_URL}/auth/login`).flush({}, {
+      status: 429, statusText: 'Too Many Requests', headers: { 'Retry-After': '2' },
+    });
+    fixture.detectChanges();
+    const button = root.querySelector<HTMLButtonElement>('button[type=submit]')!;
+    expect(root.querySelector('[role=alert]')?.textContent).toContain('Zu viele Anmeldeversuche');
+    expect(button.disabled).toBe(true);
+    expect(button.textContent).toContain('Erneut in 2 s');
+    expect(root.querySelector<HTMLInputElement>('input[type=email]')!.value).toBe('max@example.com');
+    expect(root.querySelector<HTMLInputElement>('input[type=password]')!.value).toBe('geheim123');
+    root.querySelector('form')!.dispatchEvent(new Event('submit'));
+    http.expectNone(`${API_URL}/auth/login`);
+    vi.advanceTimersByTime(1000);
+    fixture.detectChanges();
+    expect(button.textContent).toContain('Erneut in 1 s');
+    vi.advanceTimersByTime(1000);
+    fixture.detectChanges();
+    expect(button.disabled).toBe(false);
+    expect(button.textContent).toContain('Anmelden');
+  });
+
+  it.each([undefined, '-1', 'invalid', 'Infinity', '0'])('nutzt eine begrenzte Ersatzwartezeit bei ungültigem Retry-After %s', header => {
+    vi.useFakeTimers();
+    const fixture = createLogin();
+    const root = fixture.nativeElement as HTMLElement;
+    submitCredentials(root);
+    TestBed.inject(HttpTestingController).expectOne(`${API_URL}/auth/login`).flush({}, {
+      status: 429, statusText: 'Too Many Requests', headers: header ? { 'Retry-After': header } : {},
+    });
+    fixture.detectChanges();
+    expect(root.querySelector('button[type=submit]')?.textContent).toContain('Erneut in 30 s');
+    fixture.destroy();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('unterscheidet einen Ausfall des Login-Schutzes von falschen Zugangsdaten', () => {
+    vi.useFakeTimers();
+    const fixture = createLogin();
+    const root = fixture.nativeElement as HTMLElement;
+    submitCredentials(root);
+    TestBed.inject(HttpTestingController).expectOne(`${API_URL}/auth/login`).flush({}, {
+      status: 503, statusText: 'Service Unavailable', headers: { 'Retry-After': '30' },
+    });
+    fixture.detectChanges();
+    expect(root.querySelector('[role=alert]')?.textContent).toContain('vorübergehend nicht verfügbar');
+    expect(root.querySelector('[role=alert]')?.textContent).not.toContain('Passwort');
+    expect(root.querySelector<HTMLButtonElement>('button[type=submit]')?.disabled).toBe(true);
   });
 });

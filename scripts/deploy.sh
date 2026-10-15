@@ -59,7 +59,7 @@ compose run --rm backend alembic upgrade head
 echo "==> Container mit der neuen Version starten"
 compose up -d
 
-echo "==> Health-Check (Backend und Datenbank)"
+echo "==> Health-Check (Backend, Datenbank und Login-Schutz)"
 # Fragt /health/ready von INNERHALB des Backend-Containers ab. Vorher pruefte
 # das Skript "curl http://localhost:8000/health" vom Server aus - der
 # Backend-Port ist in Produktion aber bewusst gar nicht nach aussen
@@ -69,7 +69,7 @@ echo "==> Health-Check (Backend und Datenbank)"
 # Uvicorn noch. "seq 1 10" erzeugt die Zahlen 1 bis 10 fuer die Schleife.
 for attempt in $(seq 1 10); do
   if compose exec -T backend python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready', timeout=3)" 2>/dev/null; then
-    echo "OK: Backend laeuft und erreicht die Datenbank."
+    echo "OK: Backend erreicht Datenbank und gemeinsamen Login-Schutz."
     exit 0
   fi
   echo "    noch nicht bereit (Versuch ${attempt}/10) ..."
