@@ -4,6 +4,8 @@ frontend/node_modules/
 frontend/dist/
 frontend/.angular/
 frontend/coverage/
+frontend/test-results/
+frontend/playwright-report/
 
 # Logs
 npm-debug.log*
@@ -22,14 +24,23 @@ backend/__pycache__/
 backend/**/__pycache__/
 backend/*.pyc
 backend/.venv/
+backend/.pytest_cache/
+backend/.ruff_cache/
 
 # Environment
 .env
 .env.*
 !.env.example
 
-# Persönliche Lernnotizen / Interview-Vorbereitung (nicht fürs Portfolio bestimmt)
-notes/
+# Nur lokal: Lernhandbuch, PDF, Übungen und persönliche Notizen
+/notes/
+
+# Generierte Exporte und temporäre Werkzeuge sind keine Projektquellen
+/output/
+/tmp/
+.ruff_cache/
+**/__pycache__/
+*.py[cod]
 
 # Datenbank-Backups (scripts/backup.sh) - enthalten E-Mail-Adressen und
 # Passwort-Hashes aller Nutzer und duerfen NIE ins (oeffentliche) Repository.

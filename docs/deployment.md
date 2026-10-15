@@ -1,6 +1,10 @@
 # SmartDesk – Deployment auf einem eigenen VPS
 
-Diese Anleitung bringt SmartDesk auf einen gemieteten Linux-Server (VPS – Virtual Private Server), erreichbar über eine echte Domain mit automatischem HTTPS. Kein spezifischer Cloud-Anbieter vorausgesetzt – die Schritte funktionieren identisch auf Hetzner Cloud, DigitalOcean oder vergleichbaren Anbietern mit einem frischen Ubuntu-Server.
+**Stand: 15.10.2026.** Dies ist eine Betriebsanleitung, kein Nachweis eines bereits erfolgten öffentlichen Deployments. Lokale Codeänderungen sind nicht automatisch auf GitHub oder dem Zielserver vorhanden. Für die lokale Demo und Entwicklung zuerst die [Startanleitung im Projekt-README](../README.md) lesen; die [Dokumentationsübersicht](README.md) ordnet die weiteren Dokumente ein.
+
+Für die lokale Vorführung genügt die [Demo aus dem README](../README.md#demo-starten). Die bekannte Demo-Anmeldung und `docker-compose.demo.yml` gehören nicht auf einen öffentlichen Server. `DEMO_MODE` bleibt in der Produktionsumgebung `false`. Die folgenden Schritte beschreiben ein Deployment mit eigenen Zugangsdaten; noch offene Sicherheits- und Betriebsaufgaben stehen in den [bewussten Einschränkungen](architektur-und-konzepte.md#9-bewusste-einschränkungen--offene-punkte).
+
+Diese Anleitung beschreibt den Weg auf einen eigenen Linux-Server mit Domain und automatischem HTTPS. Die Serverbefehle sind für Bash auf einem unterstützten Ubuntu-System gedacht, nicht für PowerShell auf deinem Windows-Rechner. Firewall, Benutzerrechte und Paketinstallation müssen zur tatsächlich verwendeten Umgebung passen.
 
 ## Architektur
 
@@ -20,13 +24,11 @@ Ein einziger Server, drei Docker-Container (Caddy, Backend, Postgres) plus die f
 
 - Account bei einem VPS-Anbieter (Konditionen/Preise beim jeweiligen Anbieter selbst prüfen, ändern sich häufig)
 - Ein SSH-Schlüsselpaar auf dem eigenen Rechner (`ssh-keygen`, falls noch keins existiert)
-- Eine Domain, die auf den Server zeigen kann. Zwei Optionen:
-  - Eine echte Domain (günstige Registrare bieten TLDs oft für wenige Euro/Jahr)
-  - Kostenlose Alternative ohne Domain-Kauf: [nip.io](https://nip.io) – `<server-ip>.nip.io` (z.B. `203.0.113.10.nip.io`) löst automatisch auf genau diese IP auf, ganz ohne eigene DNS-Konfiguration. Funktioniert für dieses Deployment genauso gut, inklusive echtem Let's-Encrypt-Zertifikat.
+- Eine eigene Domain mit kontrollierbarer DNS-Konfiguration und Zugang zur Server-/Provider-Firewall
 
 ## Schritt 1: Server erstellen
 
-Kleinste verfügbare Instanz reicht (SmartDesk ist ein leichtgewichtiger Stack) – 1–2 GB RAM, Ubuntu 22.04 oder 24.04 LTS. Beim Erstellen den eigenen SSH-Public-Key hinterlegen, damit der Login ohne Passwort per Schlüssel funktioniert.
+Wähle ein von Docker unterstütztes Ubuntu-Release und prüfe Speicherbedarf von Frontendbuild, Containern, Datenbank und Backups unter der geplanten Last. Eine pauschale Mindestgröße ist hier nicht durch einen Lasttest belegt. Hinterlege den eigenen SSH-Public-Key und plane einen administrativen Benutzer mit gezielt verwendeten sudo-Rechten.
 
 ## Schritt 2: Erstzugriff & Grundabsicherung
 
@@ -43,21 +45,23 @@ ufw allow 443/tcp
 ufw enable
 ```
 
-Beim jeweiligen Cloud-Anbieter zusätzlich prüfen, ob es eine **eigene** Firewall auf Netzwerkebene gibt (getrennt von `ufw`, das nur innerhalb des Servers wirkt) – dort müssen dieselben drei Ports ebenfalls freigegeben sein, sonst bleibt der Server trotz `ufw` von außen unerreichbar.
+Vor Firewalländerungen einen funktionierenden SSH-Zugang absichern. Prüfe zusätzlich die Provider-Firewall. Veröffentlichte Dockerports können UFW-Regeln umgehen; die [offizielle Docker-Anleitung zu Ubuntu](https://docs.docker.com/engine/install/ubuntu/#firewall-limitations) beschreibt diese Einschränkung. Datenbank und Backend werden in der Produktions-Compose-Datei deshalb nicht als Hostports veröffentlicht.
 
 ## Schritt 3: Docker installieren
 
-```bash
-curl -fsSL https://get.docker.com | sh
-```
+Installiere Docker Engine und das Compose-Plugin nach der [offiziellen Ubuntu-Anleitung über das Paketrepository](https://docs.docker.com/engine/install/ubuntu/#install-using-the-apt-repository). Docker empfiehlt das Convenience-Skript nicht für Produktionsumgebungen. Lade nicht ungeprüft ein externes Skript direkt in eine privilegierte Shell.
 
-Offizielles Docker-Installationsskript, funktioniert auf frischen Ubuntu-Servern zuverlässig und installiert direkt die aktuelle Docker-Engine inklusive Compose-Plugin.
+```bash
+# Auf dem Zielserver: Installation und Zugriff auf den Docker-Daemon prüfen.
+docker version
+docker compose version
+```
 
 ## Schritt 4: Domain auf den Server zeigen lassen
 
 Bei echter Domain: beim Domain-Registrar (oder DNS-Anbieter) einen **A-Record** anlegen, der auf die Server-IP zeigt. DNS-Änderungen brauchen Zeit, um sich zu verbreiten (Minuten bis Stunden) – vor dem nächsten Schritt mit `dig <domain>` oder `nslookup <domain>` prüfen, ob die IP schon korrekt zurückkommt.
 
-Bei nip.io: nichts zu tun, `<server-ip>.nip.io` funktioniert sofort.
+Prüfe auch vorhandene AAAA-Einträge: Eine falsche IPv6-Adresse kann Erreichbarkeit und Zertifikatsprüfung stören. Voraussetzungen und Verhalten der Zertifikatsbeschaffung stehen in [Caddys Dokumentation zu automatischem HTTPS](https://caddyserver.com/docs/automatic-https).
 
 ## Schritt 5: Projekt auf den Server holen
 
@@ -83,9 +87,11 @@ POSTGRES_PASSWORD=<zufälliger Wert, z.B. per: python3 -c "import secrets; print
 DATABASE_URL=postgresql+psycopg://smartdesk:<derselbe Wert wie POSTGRES_PASSWORD>@postgres:5432/smartdesk
 SECRET_KEY=<zufälliger Wert, z.B. per: python3 -c "import secrets; print(secrets.token_hex(32))">
 
-# Muss zur echten Domain (bzw. nip.io-Adresse) passen
+# Muss zur echten, kontrollierten Domain passen
 FRONTEND_ORIGIN=https://smartdesk.example.com
 COOKIE_SECURE=true
+# Die bekannten lokalen Demo-Konten dürfen nicht automatisch angelegt werden.
+DEMO_MODE=false
 ```
 
 `token_hex` erzeugt nur Ziffern und die Buchstaben a–f. Das ist bei `POSTGRES_PASSWORD` wichtig: Zeichen wie `@`, `/` oder `:` hätten in `DATABASE_URL` eine eigene Bedeutung und müssten dort zusätzlich URL-kodiert werden.
@@ -132,7 +138,7 @@ docker compose -f docker-compose.prod.yml logs -f caddy
 - `https://<domain>/api/docs` → Swagger UI
 - `https://<domain>/` → Login-Seite
 
-Test-Account über die Swagger UI anlegen (`POST /api/auth/register`), dann über die normale Oberfläche einloggen.
+Ein Konto über `/register` oder die Swagger UI (`POST /api/auth/register`) anlegen und über die Oberfläche anmelden. Neue Konten sind Mitarbeitende; es gibt noch keine Rollenverwaltung in der UI. Die bekannten lokalen Demo-Konten werden in Produktion nicht erzeugt.
 
 Sicherheits-Header prüfen (setzt das `Caddyfile`):
 
@@ -140,16 +146,23 @@ Sicherheits-Header prüfen (setzt das `Caddyfile`):
 curl -sI https://<domain>/ | grep -iE "strict-transport|content-security|x-frame|x-content-type"
 ```
 
-Alle vier Header müssen erscheinen. Fehlen sie, läuft vermutlich noch ein Caddy-Container mit altem `Caddyfile` – `docker compose -f docker-compose.prod.yml restart caddy`.
+Auf der Frontendantwort sollten alle vier Header erscheinen; die CSP ist im Caddyfile bewusst nur für das Frontend gesetzt, nicht für die Swagger-Seite. Fehlen Header, Konfiguration und laufenden Container prüfen und nach einer bestätigten Korrektur Caddy neu starten.
 
 ## Produktions-Setup vorab lokal testen
 
 Die komplette Produktions-Konfiguration (Caddy, Sicherheits-Header, `--root-path`, Container ohne root) lässt sich vor dem Deployment auf dem eigenen Rechner prüfen – als **separates Compose-Projekt** (`-p`), damit eigene Container und Volumes entstehen und die lokale Entwicklungsumgebung unberührt bleibt. Caddy stellt für `localhost` automatisch ein selbstsigniertes Zertifikat aus (Browser-Warnung ist hier erwartet, `curl` braucht `-k`):
 
 ```bash
-cd frontend && npx ng build && cd ..        # Frontend-Build fuer Caddy
-DOMAIN=localhost docker compose -p smartdesk-prodtest -f docker-compose.prod.yml up -d --build
-docker compose -p smartdesk-prodtest -f docker-compose.prod.yml exec backend alembic upgrade head
+# Zunächst im Frontendverzeichnis die statischen Dateien bauen.
+cd frontend
+npm ci
+npm run build
+cd ..
+
+# Getrenntes Compose-Projekt: erst bauen und migrieren, dann den Stack starten.
+DOMAIN=localhost docker compose -p smartdesk-prodtest -f docker-compose.prod.yml build
+DOMAIN=localhost docker compose -p smartdesk-prodtest -f docker-compose.prod.yml run --rm backend alembic upgrade head
+DOMAIN=localhost docker compose -p smartdesk-prodtest -f docker-compose.prod.yml up -d
 
 curl -k https://localhost/api/health                     # {"status":"ok"}
 curl -k https://localhost/api/health/ready               # {"status":"ok","database":"ok"}
@@ -189,9 +202,15 @@ Das Skript endet mit einem Health-Check gegen `/health/ready` (von innerhalb des
 ```
 Legt eine Datei unter `backups/` an (ist in `.gitignore` – die Datei enthält E-Mail-Adressen und Passwort-Hashes aller Nutzer) und entfernt automatisch Backups, die älter als 7 Tage sind. Für automatische, regelmäßige Backups siehe den Cron-Hinweis am Ende des Skripts.
 
-Wiederherstellen (überschreibt den aktuellen Datenbankinhalt):
+Wiederherstellen ist destruktiv: Das vom Skript erzeugte SQL enthält Löschanweisungen für vorhandene Objekte. Verwende nur ein geprüftes Backup und teste den Restore zuerst in einer getrennten Umgebung. Ein bloß vorhandenes Backup ist kein belegter Wiederherstellungserfolg.
 ```bash
-docker compose -f docker-compose.prod.yml exec -T postgres \n  sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < backups/smartdesk-<zeitstempel>.sql
+# Bash auf dem Zielserver, nicht PowerShell: Fiktiven Namen durch die echte Sicherung ersetzen.
+backup_file='backups/smartdesk-YYYYMMDD-HHMMSS.sql'
+# Vor dem destruktiven Restore sicherstellen, dass die ausgewählte Datei lesbar ist.
+test -r "$backup_file" || { printf '%s\n' 'Backup nicht lesbar; Restore abgebrochen.' >&2; exit 1; }
+# -v ON_ERROR_STOP=1 beendet psql beim ersten SQL-Fehler; nicht atomar ohne weitere Optionen.
+docker compose -f docker-compose.prod.yml exec -T postgres \
+  sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < "$backup_file"
 ```
 
 Die Backups liegen auf demselben Server wie die Datenbank – fällt der Server komplett aus, sind beide weg. Für echten Schutz regelmäßig eine Kopie an einen anderen Ort ziehen (z.B. per `scp` auf den eigenen Rechner).

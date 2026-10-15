@@ -2,7 +2,9 @@
 
 Diese Datei erklärt **warum** SmartDesk so gebaut ist, wie es gebaut ist, und die wichtigsten technischen Konzepte dahinter – als Referenz für den aktuellen Architekturstand und die Begründung einzelner Entscheidungen.
 
-Die normale [README.md](../README.md) beschreibt nur *wie man das Projekt startet*. Hier geht's um das *Warum* – Spezifikation, Architekturentscheidungen und die Softwaretechnik-Prinzipien dahinter.
+Die [README.md](../README.md) gibt den schnellen Projekt- und Starteinstieg. Hier geht es um Spezifikation und Architekturentscheidungen. Die [Dokumentationsübersicht](README.md) ordnet die technischen Dokumente ein.
+
+**Abgeglichen am 15.10.2026**, einschließlich Ticketeditor, Anwendungshistorie und Versionsschutz. Aktueller Migrationskopf: `b42e8f19a620`.
 
 **Inhalt:**
 1. [Der große Überblick](#1-der-große-überblick)
@@ -27,7 +29,7 @@ SmartDesk besteht aus zwei komplett getrennten Programmen, die über HTTP mitein
 
 Diese Trennung nennt man **Client-Server-Architektur**. Der Vorteil: beide Teile lassen sich unabhängig voneinander entwickeln, testen und sogar auf unterschiedlichen Rechnern betreiben – das entspricht dem üblichen Aufbau moderner Firmen-Software.
 
-Aktuell sind Frontend und Backend noch **nicht verbunden** – das Frontend zeigt noch Testdaten. Das Verbinden kommt in einer späteren Phase (siehe [Roadmap](#10-was-noch-fehlt-kurz-roadmap)).
+Frontend und Backend sind über die echte API verbunden. In der lokalen Demo liefert Caddy den Angular-Produktionsbuild aus und leitet `/api` an FastAPI weiter. Migrationen und fiktive Beispieldaten werden beim Start angelegt. Entscheidungen zu Zuständigkeit, Konkurrenzschutz und Historie stehen ergänzend in [Workflow und Historie](entscheidungen-workflow-und-historie.md).
 
 ---
 
@@ -52,7 +54,7 @@ In der Requirements Engineering nennt man die Nutzergruppen von außen **Akteure
 |---|---|---|
 | **Employee** | meldet ein Problem (Melder eines Tickets) | `UserRole.EMPLOYEE` |
 | **Agent** | bearbeitet gemeldete Tickets | `UserRole.AGENT` |
-| **Admin** | verwaltet Nutzer, entscheidet über finale Statuswechsel | `UserRole.ADMIN` |
+| **Admin** | weist Bearbeiter zu, greift vertretend ein und entscheidet über finale Statuswechsel | `UserRole.ADMIN` |
 
 ### 2.3 Funktionale Anforderungen
 
@@ -66,10 +68,13 @@ Funktionale Anforderungen beschreiben **konkretes Verhalten** des Systems ("das 
 | FA-4 | Tickets können gelesen, teilweise aktualisiert und gelöscht werden | ✅ `GET/PATCH/DELETE /tickets/{id}` |
 | FA-5 | Ein Ticket durchläuft einen festen Status-Lebenszyklus (offen → in Bearbeitung → gelöst → geschlossen) | ✅ `PATCH /tickets/{id}/status`, Regeln in `app/services/ticket_lifecycle.py` |
 | FA-6 | Nur eingeloggte Nutzer dürfen auf Ticket-Endpunkte zugreifen | ✅ `get_current_user`-Dependency (`app/core/deps.py`), an jedem Ticket-Endpunkt |
-| FA-7 | Ein Agent kann sich ein Ticket zuweisen bzw. zugewiesen bekommen | 🔶 Datenfeld (`assignee_id`) über generisches `PATCH /tickets/{id}` setzbar, kein eigener "claim"-Endpunkt |
+| FA-7 | Ein Agent kann sich ein Ticket zuweisen bzw. zugewiesen bekommen | ✅ Übernehmen setzt den Bearbeiter; Zuweisungsregeln in `ticket_assignment.py`, Admin-Auswahl im Detaildialog |
 | FA-8 | Nur ein Admin darf ein Ticket final schließen | ✅ in `ALLOWED_TRANSITIONS` (`RESOLVED → CLOSED` nur für `ADMIN`) |
 | FA-9 | Das Dashboard zeigt Kennzahlen (offene Tickets, kritische Incidents, heute gelöst) | ✅ live aus `GET /tickets` berechnet (`dashboard.ts`) |
 | FA-10 | Wer ein Ticket sehen darf, kann es kommentieren und den Kommentarverlauf chronologisch einsehen | ✅ `GET/POST /tickets/{id}/comments` (`app/routers/comments.py`), Anzeige im Ticket-Detail-Popup |
+| FA-11 | Änderungen müssen handelnder Person und Zeitpunkt zugeordnet werden können | ✅ Transaktionale Ereignisse in `ticket_events`, `GET /tickets/{id}/history` |
+| FA-12 | Registrierung und Ticketsuche müssen ohne API-Werkzeuge nutzbar sein | ✅ `/register`, Suchfeld und kombinierbare Filter im Dashboard |
+| FA-13 | Support/Admin können Inhalte in der Oberfläche bearbeiten, ohne neuere Änderungen unbemerkt zu überschreiben | ✅ `TicketEditor`, `expected_version` und Konfliktbehandlung |
 
 Diese Tabelle ist zugleich ein kleines Beispiel für Requirements-Tracing: jede Zeile lässt sich auf einen Commit oder eine Datei zurückführen – das ist genau das Prinzip, das professionelle RE-Werkzeuge (z.B. Jira, Azure DevOps mit verlinkten Work Items) automatisieren.
 
@@ -81,11 +86,11 @@ Nicht-funktionale Anforderungen (NFA) beschreiben **Qualitätseigenschaften** st
 |---|---|---|
 | **Sicherheit** | Passwörter dürfen niemals im Klartext gespeichert werden | bcrypt-Hashing ([Abschnitt 6](#6-sicherheitsentscheidungen-bei-den-auth-endpunkten)) |
 | **Sicherheit** | Zugriff muss nachweisbar an einen Nutzer gebunden sein | JWT mit `sub`/`role`/`exp` |
-| **Sicherheit** | Alle Eingaben werden serverseitig geprüft, ungültige Daten erzeugen `422`, nie `500` | Pydantic-Schemas mit Format-/Längenregeln ([Abschnitt 6](#security-review-funde-und-behebungen)) |
+| **Sicherheit** | Eingabeschemas prüfen Format und Länge; abgelehnte Eingaben werden als `422` beantwortet | Pydantic-Schemas; dies schließt andere interne Fehler nicht pauschal aus ([Abschnitt 6](#security-review-funde-und-behebungen)) |
 | **Sicherheit** | Der Browser erhält zusätzliche Schutzanweisungen gegen XSS, Clickjacking und HTTPS-Downgrade | Sicherheits-Header im `Caddyfile` (CSP, HSTS, `X-Frame-Options`) |
 | **Wartbarkeit** | Code muss von anderen Entwicklern verstanden und erweitert werden können | Schichtenarchitektur ([Abschnitt 4](#4-aufbau-des-backends-die-vier-schichten)), durchgängige Kommentare |
 | **Nachvollziehbarkeit** | Datenbank-Änderungen müssen versioniert und rückgängig machbar sein | Alembic-Migrationen |
-| **Testbarkeit** | Kernlogik muss automatisiert geprüft werden können, ohne die ganze App zu starten | Backend: reine Funktionen in `security.py`/`ticket_lifecycle.py` + pytest + CI. Frontend: Komponenten-/Service-Tests mit gemocktem `HttpClient` (Vitest) + CI |
+| **Testbarkeit** | Kernlogik muss automatisiert geprüft werden können, ohne die ganze App zu starten | Backend: datenbankfreie Security-/Lifecycle-Tests und PostgreSQL-Integrationstests. Frontend: Komponenten-/Service-Tests mit Test-HTTP-Backend und Playwright |
 | **Portabilität** | Die Entwicklungsumgebung muss auf jedem Rechner identisch reproduzierbar sein | Docker Compose |
 | **Konsistenz** | Ungültige Datenzustände (z.B. Ticket ohne existierenden Melder) dürfen nicht in der DB landen | Foreign Keys, DB-Enums, serverseitige Prüfungen |
 
@@ -163,7 +168,7 @@ Docker sorgt dafür, dass Backend und Datenbank **isoliert und reproduzierbar** 
 ### Warum JWT + bcrypt für Auth?
 
 - **bcrypt** hasht Passwörter absichtlich langsam, damit gestohlene Passwort-Hashes nicht in Sekunden durch Ausprobieren geknackt werden können.
-- **JWT** merkt sich, wer eingeloggt ist, ohne dass der Server selbst etwas speichern muss – skaliert besser und ist der heute übliche Standard für APIs. Details dazu in [Abschnitt 6](#6-sicherheitsentscheidungen-bei-den-auth-endpunkten).
+- **JWT** trägt signierte Anmeldeinformationen mit Ablaufzeit. SmartDesk verwendet keine separate serverseitige Sitzungstabelle, lädt aber bei geschützten Requests den Nutzer aus der Datenbank. Das ist eine konkrete Architekturentscheidung, keine pauschale Überlegenheit gegenüber klassischen Serversitzungen. Details in [Abschnitt 6](#6-sicherheitsentscheidungen-bei-den-auth-endpunkten).
 
 ---
 
@@ -181,11 +186,11 @@ Service (app/services/)    → Geschäftslogik, die mehr ist als simples Lesen/S
                               app/services/ticket_access.py: wer welches Ticket sehen darf)
 ```
 
-Grund für diese Trennung: jede Schicht hat genau eine Verantwortung – der Router weiß nichts über SQL, das Model weiß nichts über HTTP. Das macht jede Schicht einzeln verständlich und testbar, auch wenn das Projekt wächst.
+Die Bereiche haben unterschiedliche Aufgaben: Router kennen HTTP, führen SQLAlchemy-Abfragen aus und besitzen die Transaktionen. Schemas validieren Datenformen; Modelle beschreiben die Persistenz; Services bündeln Fachregeln. Eine zusätzliche Repository-Schicht ist im aktuellen Projekt nicht vorhanden.
 
 **Fachliche Fehler ohne HTTP-Bezug.** Die Services importieren nichts aus FastAPI. Verletzt eine Anfrage eine fachliche Regel, werfen sie eigene Fehlerklassen aus `app/services/errors.py` (`TicketNotFoundError`, `PermissionDeniedError`, `InvalidTransitionError`). Erst die Web-Schicht übersetzt sie an genau einer Stelle (`app/core/error_handlers.py`) in HTTP-Antworten (404/403/409, Format `{"detail": "..."}` wie bei FastAPIs eigener `HTTPException`). So bleiben die Regeln auch außerhalb eines HTTP-Requests nutzbar (etwa in einem späteren Hintergrund-Job), und die Tests prüfen die fachliche Aussage ("Übergang ungültig") statt einer Statuszahl. Ein Test stellt sicher, dass jede Fehlerklasse einen Statuscode hat und der Handler in `main.py` registriert ist.
 
-Der Fachbegriff dafür ist **Schichtenarchitektur (Layered Architecture)** – eines der ältesten und am weitesten verbreiteten Architekturmuster überhaupt (auch als "3-Tier-Architektur" bekannt). Dieser Abschnitt entspricht im arc42-Sinn im Grunde der "Bausteinsicht" der Architektur.
+Dies ist eine logische Aufteilung des Backendcodes. Sie ist von der physischen Aufteilung in Browser, API-Prozess und Datenbank zu unterscheiden; vier Codebereiche sind nicht dasselbe wie vier separat betriebene Dienste. Im arc42-Sinn entspricht der Abschnitt einer Bausteinsicht.
 
 Das folgende Sequenzdiagramm zeigt das Zusammenspiel der Schichten und Schnittstellen am Beispiel von `POST /tickets`: der Router ruft zunächst die Authentifizierungs-Dependency auf (Abschnitt 6), erst danach die eigentliche Erstell-Logik.
 
@@ -227,6 +232,7 @@ classDiagram
     }
     class Ticket {
         +int id
+        +int version
         +str title
         +str description
         +TicketStatus status
@@ -234,6 +240,7 @@ classDiagram
         +int requester_id
         +int assignee_id
         +datetime created_at
+        +datetime updated_at
         +datetime resolved_at
         +datetime closed_at
     }
@@ -242,6 +249,14 @@ classDiagram
         +int ticket_id
         +int author_id
         +str body
+        +datetime created_at
+    }
+    class TicketEvent {
+        +int id
+        +int ticket_id
+        +int actor_id
+        +str kind
+        +jsonb changes
         +datetime created_at
     }
     class UserRole {
@@ -269,6 +284,8 @@ classDiagram
     Ticket "0..*" --> "0..1" User : assignee_id
     Comment "0..*" --> "1" Ticket : ticket_id
     Comment "0..*" --> "1" User : author_id
+    TicketEvent "0..*" --> "1" Ticket : ticket_id
+    TicketEvent "0..*" --> "1" User : actor_id
     User --> UserRole
     Ticket --> TicketStatus
     Ticket --> TicketPriority
@@ -278,9 +295,9 @@ classDiagram
 
 **Warum 4 Ticket-Status statt 3 (`open`/`in_progress`/`resolved`/`closed`)?** Mit nur 3 Status ist "schließen" eine einzelne Aktion ohne Kontrolle. Mit `resolved` als Zwischenschritt gibt es eine echte Freigabe-Regel: ein Agent markiert als gelöst, aber nur ein Admin (oder der Melder durch Ablehnen) entscheidet über den nächsten Schritt.
 
-**Warum die Status-Übergänge als einfaches Python-Dictionary statt einer State-Machine-Bibliothek?** Bei nur 4 Zuständen ist eine Bibliothek unnötige Komplexität – `ALLOWED_TRANSITIONS` in [ticket_lifecycle.py](../backend/app/services/ticket_lifecycle.py) ist ein `dict[Status, dict[Status, set[Rolle]]]`, genauso mächtig wie eine State-Machine-Bibliothek, aber ohne zusätzliche Abhängigkeit komplett durchschaubar. Das ist ein bewusstes **YAGNI**-Prinzip ("You Aren't Gonna Need It") – nicht jede Modellierungsfrage braucht die "enterprise" Lösung.
+**Warum die Status-Übergänge als Python-Dictionary?** Die kleine Tabelle `ALLOWED_TRANSITIONS` in [ticket_lifecycle.py](../backend/app/services/ticket_lifecycle.py) reicht für die aktuell vier Zustände. Zusätzliche Personen- und Zuständigkeitsregeln stehen in `get_allowed_next_statuses`. Eine umfangreichere State-Machine-Bibliothek könnte weitere Fähigkeiten mitbringen, die für diesen Ablauf bislang nicht benötigt werden.
 
-**Wer darf welchen Status-Übergang auslösen?** Umgesetzt in [apply_status_transition](../backend/app/services/ticket_lifecycle.py): `OPEN → IN_PROGRESS` und `IN_PROGRESS → RESOLVED` dürfen `AGENT`/`ADMIN` (ein Ticket claimen bzw. als gelöst markieren), `RESOLVED → CLOSED` nur `ADMIN` (FA-8), `RESOLVED → IN_PROGRESS` darf `EMPLOYEE` **nur beim eigenen** Ticket auslösen (Ablehnen der Lösung) oder `ADMIN` bei jedem. `CLOSED` ist ein Endzustand ohne Übergänge raus. Das ist eine **fachliche Entscheidung, keine rein technische** – bei abweichenden Anforderungen (z.B. sollen Agents nur eigene zugewiesene Tickets bearbeiten dürfen) ist genau diese Tabelle die Stelle zum Anpassen.
+**Wer darf welchen Status-Übergang auslösen?** `OPEN → IN_PROGRESS` ist für Agents nur bei nicht oder selbst zugewiesenem Ticket erlaubt; Admins dürfen auch fremde Zuweisungen übernehmen. `IN_PROGRESS → RESOLVED` dürfen Agents nur als zuständiger Bearbeiter, Admins auch vertretend. `RESOLVED → CLOSED` ist Admins vorbehalten. `RESOLVED → IN_PROGRESS` dürfen der meldende Employee oder ein Admin auslösen. `CLOSED` ist ein Endzustand. Die Rollentabelle und die zusätzlichen Objektbedingungen bilden gemeinsam die Regel, siehe [ticket_lifecycle.py](../backend/app/services/ticket_lifecycle.py).
 
 Als Zustandsdiagramm (UML State Machine) entspricht `ALLOWED_TRANSITIONS` genau folgendem Bild:
 
@@ -312,7 +329,7 @@ stateDiagram-v2
 
 **Warum werden Zeitstempel mit Zeitzone gespeichert (`timestamptz`)?** Bis Migration `50d4c94502eb` waren alle Datumsspalten `timestamp without time zone`. PostgreSQL schrieb per `now()` UTC-Uhrzeiten hinein, die API lieferte sie ohne Zeitzonen-Angabe (`2026-10-14T14:07:59`), und der Browser interpretierte sie als Ortszeit – jede Uhrzeit wurde in Deutschland 1–2 Stunden zu früh angezeigt, und die Kennzahl "Heute gelöst" kippte kurz nach Mitternacht auf den falschen Tag. Mit `timestamp with time zone` speichert die Datenbank einen eindeutigen Zeitpunkt, die API liefert `...Z` (UTC), und der Browser rechnet korrekt in die Ortszeit um. Die Regel steht zentral in `Base.type_annotation_map` ([database.py](../backend/app/core/database.py)), sodass jede künftige `Mapped[datetime]`-Spalte automatisch mit Zeitzone angelegt wird; ein Test prüft alle Datumsspalten aller Tabellen. Die Migration rechnet bestehende Werte ausdrücklich `AT TIME ZONE 'UTC'` um, statt sich auf die Zeitzonen-Einstellung der jeweiligen Datenbankverbindung zu verlassen.
 
-**Was passiert mit `resolved_at`, wenn eine Lösung abgelehnt wird?** Es wird geleert. `resolved_at` beschreibt "seit wann ist das Ticket gelöst" – nach `RESOLVED → IN_PROGRESS` stimmt das nicht mehr. Ein stehengebliebener Wert ließ das Dashboard abgelehnte Tickets weiter unter "Heute gelöst" zählen. Den Verlauf ("wann wurde wie oft abgelehnt") kann ein einzelnes Feld ohnehin nicht abbilden; dafür wäre eine eigene Historien-Tabelle nötig (siehe Abschnitt 9).
+**Was passiert mit `resolved_at`, wenn eine Lösung abgelehnt wird?** Es wird geleert. `resolved_at` beschreibt "seit wann ist das Ticket gelöst"; nach `RESOLVED → IN_PROGRESS` stimmt das nicht mehr. Ein stehengebliebener Wert ließ das Dashboard abgelehnte Tickets weiter unter "Heute gelöst" zählen. Den Verlauf speichert inzwischen die separate Tabelle `ticket_events`, siehe [Entscheidungen zur Historie](entscheidungen-workflow-und-historie.md).
 
 **In welcher Reihenfolge liefert `GET /tickets` die Tickets?** Wie eine Arbeits-Warteschlange im Support: höchste Priorität zuerst, bei gleicher Priorität das älteste Ticket oben, `id` als Tie-Breaker. Ohne `ORDER BY` ist die Reihenfolge in SQL nicht definiert; PostgreSQL lieferte die Zeilen in Speicher-Reihenfolge, und ein gerade geändertes Ticket rutschte ans Ende. Das Sortieren nach `priority` funktioniert, weil PostgreSQL ENUM-Werte in ihrer Deklarationsreihenfolge (`low` < `medium` < `high` < `critical`) vergleicht, nicht alphabetisch.
 
@@ -347,7 +364,7 @@ Eine SPA muss den JWT irgendwo zwischen Login und jeder folgenden Anfrage aufbew
 
 SmartDesk verwendet den **HttpOnly-Cookie**. Eine naheliegende Alternative – den Token einfach *verschlüsselt* in `localStorage` ablegen – löst das Problem nicht wirklich: der Schlüssel zum Entschlüsseln müsste ebenfalls im Frontend-Code liegen, und genau dort läuft bei einer XSS-Lücke auch der eingeschleuste Angreifer-Code – er hätte also denselben Zugriff auf die Entschlüsselung wie die App selbst. Nur ein für JavaScript grundsätzlich unerreichbarer Speicherort (der Cookie mit `HttpOnly`-Flag) schließt diesen Angriffsweg tatsächlich.
 
-Die verbleibende CSRF-Lücke wird über das Cookie-Attribut `SameSite=Lax` eingedämmt ([login](../backend/app/routers/auth.py)): der Browser schickt den Cookie dann nicht bei Anfragen mit, die von einer anderen Seite ausgelöst werden.
+`SameSite=Lax` begrenzt bestimmte Cross-Site-Anfragen, blockiert aber nicht pauschal jede von anderswo ausgelöste Anfrage; sichere Top-Level-Navigationen können Cookies weiterhin mitsenden. „Site“ und „Origin“ sind nicht identisch. `HttpOnly` schützt vor direktem JavaScript-Lesen des Cookies, nicht vor jeder Wirkung einer XSS-Lücke. Die Attribute und Ausnahmen erklärt [MDN zu Set-Cookie](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie).
 
 **Konsequenz für die API:** `POST /auth/login` liefert den Token weiterhin zusätzlich im JSON-Body zurück (`TokenResponse`) – nicht fürs Frontend, sondern damit Swagger UI (`/docs`) und manuelle Tests per curl weiterhin über den klassischen `Authorization`-Header funktionieren. Das Angular-Frontend liest dieses Feld bewusst nie. `get_current_user` akzeptiert deshalb beide Quellen (Header ODER Cookie, siehe [deps.py](../backend/app/core/deps.py)), und da das Frontend den Token selbst nie sieht, gibt es `GET /auth/me`: einen Endpunkt, der anhand des Cookies zurückmeldet, wer aktuell eingeloggt ist – genutzt beim Start der Angular-App, um nach einem Seiten-Reload den Session-Status wiederherzustellen (siehe [Auth-Service](../frontend/src/app/core/auth/auth.ts)).
 
@@ -357,14 +374,14 @@ sequenceDiagram
     participant A as auth.py
     participant D as deps.py
 
-    B->>A: POST /auth/login (email, password)
+    B->>A: POST /auth/login (username=E-Mail, password)
     A-->>B: Set-Cookie: access_token=... (HttpOnly)<br/>Body: {access_token, token_type}
     Note over B: Angular ignoriert access_token im Body,<br/>der Cookie ist ohnehin fuer JS unsichtbar
 
     B->>A: GET /auth/me (Cookie wird vom Browser automatisch mitgeschickt)
     A->>D: Depends(get_current_user)
     D-->>A: current_user
-    A-->>B: {id, email, fullName, role}
+    A-->>B: {id, email, full_name, role}
     Note over B: Angular setzt currentUser-Signal -> UI weiss, wer eingeloggt ist
 ```
 
@@ -376,11 +393,13 @@ sequenceDiagram
 2. `decode_access_token` (aus `security.py`) prüft Signatur und Ablaufzeit – schlägt das fehl (`jwt.PyJWTError`), gibt es sofort `401`.
 3. Die `sub`-Claim aus dem Token wird als User-ID benutzt, um den `User` zu laden – existiert er nicht mehr (z.B. gelöscht), ebenfalls `401`.
 
+Für Rollenprüfungen wird die aktuelle Rolle dieses geladenen Nutzers verwendet, nicht blind die `role`-Claim aus dem Token übernommen.
+
 **Wichtige Unterscheidung:** Das ist **Authentifizierung** (ist der Nutzer überhaupt eingeloggt?), zusätzlich dazu **Autorisierung** (darf diese konkrete Rolle diese konkrete Aktion?) – umgesetzt über zwei verschiedene Mechanismen, je nach Frage:
 - **Ja/Nein-Berechtigung** (darf diese Rolle das überhaupt?) → `Depends(require_roles(...))` in `deps.py`, z.B. `DELETE /tickets/{id}` nur für `ADMIN`, `PATCH /tickets/{id}` nur für `AGENT`/`ADMIN`.
 - **Sichtbarkeits-/Objekt-Filterung** (welche Teilmenge darf diese Rolle sehen?) → z.B. `GET /tickets` liefert `EMPLOYEE` nur die eigenen Tickets, `GET /tickets/{id}` gibt bei fremdem Ticket bewusst `404` statt `403` zurück (verhindert, dass sich die Existenz eines fremden Tickets überhaupt erkennen lässt – siehe **Object-Level Authorization** / IDOR-Vermeidung).
 
-Die Regel "wer darf welches einzelne Ticket sehen" steht an genau einer Stelle: `get_visible_ticket_or_404` in [ticket_access.py](../backend/app/services/ticket_access.py). Sie wird von `GET /tickets/{id}` **und** von beiden Kommentar-Endpunkten verwendet – wer ein Ticket nicht sehen darf, darf auch dessen Kommentare weder lesen noch schreiben. Ursprünglich stand die Regel direkt in `get_ticket`; mit den Kommentar-Endpunkten wäre sie ein zweites Mal nötig geworden. Zwei Kopien derselben Sicherheitsregel sind riskant: wird eine später angepasst und die andere vergessen, entsteht unbemerkt eine Lücke. Deshalb wurde sie vorher in ein eigenes Service-Modul ausgelagert (Refactoring, siehe DRY in Abschnitt 7). Nur `GET /tickets` (Liste) filtert weiterhin selbst per SQL-`WHERE`: dort sollen fremde Tickets gar nicht erst aus der Datenbank geladen werden, statt sie erst zu laden und danach in Python auszusortieren.
+Die gemeinsame Objektprüfung `get_visible_ticket_or_404` in [ticket_access.py](../backend/app/services/ticket_access.py) wird bei Ticketdetail, Statusänderung, beiden Kommentar-Endpunkten und Historie verwendet. Die Listenregel liegt daneben in `visible_tickets_query`: Mitarbeitende werden bereits per SQL auf eigene Tickets eingeschränkt. Der generische PATCH und DELETE verwenden zusätzlich ihre eigenen rollenbeschränkten Zugriffspfade.
 
 Für Status-Übergänge läuft die Rollenprüfung weiterhin separat in `ticket_lifecycle.py` (siehe Abschnitt 5), weil sie vom *aktuellen Status* abhängt, nicht nur von der Rolle allein.
 
@@ -388,7 +407,7 @@ Eine zweite Konsequenz derselben Änderung: `POST /tickets` nimmt `requester_id`
 
 ### Security-Review: Funde und Behebungen
 
-Eine systematische Prüfung von Backend, Frontend, Deployment-Konfiguration, Abhängigkeiten (`npm audit`, `pip-audit`: keine bekannten Schwachstellen) und Git-Historie (keine eingecheckten Geheimnisse) ergab folgende Lücken. Jede Behebung ist durch automatisierte Tests abgesichert (`test_input_validation.py`, `test_config.py`, `test_security.py`) und wurde zusätzlich über HTTP-Anfragen gegen den laufenden Docker-Stack mit PostgreSQL nachgeprüft (Wegwerf-Accounts, danach entfernt). Die Migrationskette wurde auf einer leeren Datenbank vollständig hoch- und wieder heruntergefahren; `alembic check` bestätigt, dass Models und Migrationen übereinstimmen:
+Die folgende Tabelle beschreibt zuvor gefundene und behobene Probleme, keine aktuelle Sicherheitszertifizierung. Schema-, Auth- und Rollenregeln haben automatisierte Tests; Container-/Netzwerk- und Betriebsfragen brauchen zusätzliche Prüfungen. Frühere Audit- oder Laufzeitergebnisse sind keine dauerhaft gültigen Eigenschaften. Aktuelle Testbefehle und ihre Grenzen stehen im [Projekt-README](../README.md#qualität-prüfen).
 
 | # | Fund | Auswirkung | Behebung |
 |---|---|---|---|
@@ -410,19 +429,19 @@ Der Fund #1 zeigt ein typisches Muster: eine Absicherung, die "fast überall" gi
 
 Dieser Abschnitt macht explizit, welche im Berufsleben verbreiteten Prinzipien in SmartDesk stecken, jeweils mit Bezug auf die konkrete Fundstelle im Code.
 
-**Single Responsibility Principle (SRP)** – Teil der SOLID-Prinzipien: jede Einheit (Datei, Klasse, Funktion) sollte genau einen Grund haben, sich zu ändern. Sichtbar an der [Schichtenarchitektur](#4-aufbau-des-backends-die-vier-schichten): ändert sich die Validierungsregel für ein Ticket, ändert sich nur `schemas/ticket.py` – nicht der Router, nicht das Model. Genauso bei `security.py`: die Datei weiß nur etwas über Hashing/JWT, nichts über HTTP oder die Datenbank.
+**Single Responsibility Principle (SRP)** – Aufgaben werden getrennt, damit Regeln nicht beliebig über HTTP-, Datenbank- und Darstellungscode verteilt sind. Eine Eingabegrenze steht im Schema, muss aber gegebenenfalls auch in Formularen, Tests und Dokumentation angepasst werden. `security.py` bündelt Hashing/JWT und kennt keine HTTP-Handler oder Datenbankabfragen.
 
 **DRY (Don't Repeat Yourself)** – Wissen soll an genau einer Stelle im Code stehen. Beispiele in SmartDesk:
 - `get_settings()` mit `@lru_cache` (`config.py`) – Umgebungsvariablen werden genau einmal eingelesen, nicht bei jedem Zugriff neu.
-- `STATUS_LABELS` (`ticket-card.ts`) – die deutschen Beschriftungen für Ticket-Status stehen an einer Stelle, nicht verstreut in jedem Template.
+- `STATUS_LABELS` und `PRIORITY_LABELS` ([ticket-labels.ts](../frontend/src/app/core/tickets/ticket-labels.ts)) – Vorschau und Detaildialog teilen sich die deutschen Beschriftungen. Die Historie hat zusätzlich eine eigene Übersetzung für Ereignis- und Feldnamen.
 - `viewTabs` (`dashboard.ts`) – eine einzige Datenquelle für Tab-Beschriftung, Filterlogik und Abschnittsüberschrift gleichzeitig, statt das dreimal separat zu pflegen.
-- `get_visible_ticket_or_404` (`ticket_access.py`) – eine Sichtbarkeitsregel für drei Endpunkte (Ticket-Detail, Kommentare lesen, Kommentar schreiben), siehe Abschnitt 6. Bei Sicherheitsregeln ist DRY besonders wichtig, weil eine vergessene Kopie nicht als Fehler auffällt, sondern als stille Lücke.
+- `get_visible_ticket_or_404` (`ticket_access.py`) – dieselbe Objektprüfung für Detail, Status, Kommentare und Historie. Bei Sicherheitsregeln ist eine vergessene abweichende Kopie eine potenzielle Zugriffslücke.
 
 **Dependency Injection** – ein Muster, bei dem eine Funktion ihre Abhängigkeiten (z.B. eine Datenbank-Session) von außen gereicht bekommt, statt sie selbst zu beschaffen. Umgesetzt über `db: Session = Depends(get_db)` in jedem Router. Macht Code testbar: `list_tickets(db: Session = Depends(get_db))` lässt sich in einem Test mit einer Test-Session aufrufen, ohne die echte Datenbank-Verbindungslogik nachzubauen.
 
-**Fail Fast / frühzeitige Validierung** – Beispiel `create_ticket` in `tickets.py`: statt eine ungültige `requester_id` bis zum `db.commit()` durchlaufen zu lassen (wo sie als kryptischer Postgres-Fehler auffliegen würde), wird sie sofort geprüft und mit einer verständlichen `404`-Antwort abgebrochen. Fehler so früh wie möglich, so verständlich wie möglich melden.
+**Fail Fast / frühzeitige Validierung** – leere oder zu lange Titel werden bereits vom Eingabeschema abgewiesen, statt erst beim Datenbankschreiben aufzufallen. `requester_id` wird beim Erstellen nicht aus Clientdaten übernommen, sondern aus dem angemeldeten Nutzer gesetzt. Der Startcheck für `SECRET_KEY` verhindert zusätzlich den Betrieb mit dem bekannten Platzhalter.
 
-**Testbarkeit als Designkriterium, nicht Nachgedanke** – dass `hash_password`/`verify_password`/`create_access_token` (in `security.py`) und `apply_status_transition` (in `ticket_lifecycle.py`) reine Funktionen ohne Datenbank- oder HTTP-Abhängigkeit sind, ist kein Zufall: genau das macht sie in den jeweiligen Tests ohne Testdatenbank, ohne laufenden Server, in Millisekunden testbar.
+**Testbarkeit als Designkriterium** – Security- und Lifecycle-Helfer benötigen weder HTTP-Server noch Datenbank, um direkt getestet zu werden. Sie sind nicht alle streng rein: Hashing verwendet einen Zufallssalt, Tokenerzeugung eine Uhrzeit und `apply_status_transition` verändert das übergebene Objekt. „Datenbankfrei testbar“ ist hier die treffendere Beschreibung.
 
 **Aussagekräftige Namen statt Kommentar-Krücken** – z.B. `openTicketCount`, `verify_password`, `apply_status_transition` statt generischer Namen wie `data` oder `helper`. Guter Name = weniger Erklärungsbedarf.
 
@@ -436,9 +455,18 @@ Dieser Abschnitt macht explizit, welche im Berufsleben verbreiteten Prinzipien i
 
 **Smart/Container- vs. Dumb/Presentational-Komponenten** – ein sehr verbreitetes Frontend-Muster (nicht Angular-spezifisch, genauso in React/Vue üblich): eine "Smart"-Komponente hält Zustand und Logik, eine "Dumb"-Komponente bekommt fertige Daten nur gereicht und zeigt sie an, ohne selbst zu wissen, woher sie kommen. SmartDesk setzt das bereits um:
 - `Dashboard` (`dashboard.ts`) ist die **Smart Component**: hält `tickets` als Signal, berechnet `openTicketCount`, `visibleTickets` etc.
-- `TicketCard` (`ticket-card.ts`) ist **Presentational**: bekommt ein einzelnes `Ticket` über `input.required<Ticket>()` rein, berechnet daraus nur eine Anzeige-Beschriftung (`statusLabel`) – sie weiß nichts über die Gesamtliste, Filter oder Tabs.
+- `TicketPreview`, `TicketFilters` und `TicketStatistics` sind **Präsentationskomponenten**: Sie erhalten Daten über Inputs beziehungsweise Signal-Models und melden Interaktionen über Outputs. Sie laden keine Daten selbst.
+- `TicketCard` hält den lokalen Zustand des Detaildialogs, koordiniert Statuswechsel und Zuweisungen und meldet bestätigte Änderungen an das Dashboard. Sie kennt weder die Gesamtliste noch Filter oder Tabs.
+
+- `TicketEditor` hält einen lokalen Inhaltsentwurf, sendet nur geänderte Felder plus Versionsbedingung und meldet bestätigte oder neu geladene Ticketdaten an `TicketCard`. Kommentare und Historie bleiben eigenständige Datenkomponenten.
 
 Der Vorteil: `TicketCard` lässt sich isoliert wiederverwenden und testen, ohne die gesamte Dashboard-Logik mitzuschleppen.
+
+**Bearbeitung ohne Kontextverlust** – bestätigte Statuswechsel und Zuweisungen aktualisieren das Ticket im geöffneten Dialog sowie die Historie. Der Kommentarbereich bleibt bestehen, sodass ein noch nicht gesendeter Entwurf erhalten bleibt. Erst beim Schließen lädt das Dashboard seine Warteschlange neu. Andernfalls würde ein Ticket, das durch den Statuswechsel nicht mehr zum aktiven Filter passt, mitsamt seinem Dialog aus der Ansicht verschwinden.
+
+Der gleiche Ablauf gilt für bestätigte Inhaltsänderungen. Die Verwerfbestätigung schützt den Inhaltseditor beim Abbrechen beziehungsweise Dialogschließen. Ein ungesendeter Kommentar geht beim tatsächlichen Dialogschließen weiterhin verloren; ein allgemeiner Navigations- oder Reloadschutz ist nicht implementiert.
+
+**Kompakte Warteschlange und bedarfsgesteuertes Laden** – die Listenansicht zeigt vergleichbare Spalten, die alternative Kartenansicht zusätzlich eine Beschreibungsvorschau. Statuszähler und Ergebnisse verwenden dieselben Such- und Filterkriterien. Bei einem fehlgeschlagenen Neuladen bleibt der letzte erfolgreiche Datenstand sichtbar; eine Meldung kennzeichnet den Fehler. Dashboard, Anmeldung, Registrierung und Ticketerstellung werden über `loadComponent` als eigene Route-Chunks geladen.
 
 **Signals statt manueller Zustandsverwaltung** – Angular bietet mit RxJS auch einen mächtigeren, aber komplexeren Ansatz für asynchrone Datenströme. Für simplen, synchronen UI-Zustand (welcher Tab ist aktiv, welche Tickets gibt es gerade) sind Signals die schlankere, seit neueren Angular-Versionen empfohlene Lösung – wieder ein Fall von "die einfachste Lösung wählen, die das Problem tatsächlich löst", nicht das mächtigste verfügbare Werkzeug.
 
@@ -446,15 +474,15 @@ Der Vorteil: `TicketCard` lässt sich isoliert wiederverwenden und testen, ohne 
 
 **Natives `<dialog>` statt selbstgebautem Modal** – das Ticket-Detail-Popup ([ticket-card.ts](../frontend/src/app/pages/dashboard/ticket-card/ticket-card.ts)) nutzt das HTML-Element `<dialog>` mit `showModal()`, statt ein eigenes Overlay zu bauen. Der Browser übernimmt dabei drei Dinge, die man bei einer selbstgebauten Lösung sonst selbst programmieren müsste: Fokus-Einfang (Tab bleibt innerhalb des Dialogs), Schließen per Escape-Taste, und den abgedunkelten Hintergrund (`::backdrop`). Nur das Schließen per Klick auf den Hintergrund ist kein eingebautes Verhalten und wird per Klick-Handler nachgebaut (prüft, ob das Klick-Ziel das `<dialog>`-Element selbst ist, nicht sein Inhalt).
 
-**Barrierefreiheit (Accessibility) von Anfang an mitgedacht** – `aria-label`, `role="tablist"`/`role="tab"`, `aria-selected` sind bereits im Code (`dashboard.html`, `main-layout.html`). Das ist keine nachträgliche Fleißaufgabe, sondern ein Qualitätsmerkmal, das in professionellen Frontend-Projekten regelmäßig explizit gefordert wird (Stichwort WCAG).
+**Tastaturbedienung und zugängliche Beschriftungen** – native Buttons, beschriftete Formularfelder, sichtbare Fokusringe, `aria-pressed` für die Status- und Ansichtsauswahl sowie benannte Icon-Buttons unterstützen die Bedienung ohne Maus. Der native Dialog begrenzt den Fokus auf seinen Inhalt und gibt ihn beim Schließen zurück. Playwright prüft Öffnen per Enter, Schließen per Escape, Fokus-Rückkehr und responsive Layoutgrenzen. Dies ersetzt keine vollständige Barrierefreiheitsprüfung.
 
 **Kommentarbereich als eigene Komponente, erzeugt erst beim Öffnen des Popups** – [TicketComments](../frontend/src/app/pages/dashboard/ticket-comments/ticket-comments.ts) enthält Kommentarliste und Eingabeformular und wird in `ticket-card.html` nur innerhalb von `@if (isDetailOpen())` gerendert. Zwei Gründe:
 - **Lazy Loading:** Das Dashboard erzeugt pro Ticket eine `TicketCard`. Würde jede Karte ihre Kommentare sofort laden, entstünde bei 30 Tickets 30 Anfragen, ohne dass ein Popup geöffnet wurde. Durch das `@if` existiert die Komponente (und damit ihre `resource()`-Anfrage) erst, wenn das Popup aufgeht. Beim Schließen zerstört Angular sie wieder, beim nächsten Öffnen wird frisch geladen. Das Schließen wird über das native `close`-Event des `<dialog>` erkannt, weil es bei *jeder* Art des Schließens feuert – auch per Escape-Taste, die der Browser selbst behandelt.
-- **Single Responsibility:** Zuerst lag der Kommentarbereich direkt in `TicketCard`. Der Produktions-Build meldete daraufhin eine überschrittene Stylesheet-Größe (`anyComponentStyle`-Budget in `angular.json`, 4 kB). Solche Budgets sind ein Frühwarnsignal dafür, dass eine Komponente zu viele Aufgaben übernimmt. Statt das Budget hochzusetzen, wurde der Kommentarbereich ausgelagert: `TicketCard` verantwortet Karte, Popup und Statuswechsel, `TicketComments` den Kommentarverlauf.
+- **Single Responsibility:** Kommentarbereich, Ticketvorschau, Filterleiste und Kennzahlen haben eigene Komponenten. `TicketCard` koordiniert Detaildialog und Ticketaktionen, `TicketComments` den Kommentarverlauf. Die Stylesheet-Budgets im Produktionsbuild bleiben unverändert und werden eingehalten.
 
 Nach dem Senden hängt die Komponente den vom Server bestätigten Kommentar direkt an die Liste an (`resource.update(...)`), statt die ganze Liste neu zu laden. Das spart eine Anfrage und verhindert ein kurzes Aufflackern des Ladezustands. Nutzertext wird ausschließlich per Interpolation (`{{ comment.body }}`) ausgegeben, die Angular immer als reinen Text behandelt – nie per `[innerHTML]`. Das schützt vor Cross-Site-Scripting (XSS); ein eigener Test prüft, dass ein eingeschleustes `<img onerror=...>` als Text erscheint und kein Element erzeugt.
 
-**Komponenten-/Service-Tests mit gemocktem `HttpClient`** – `Auth`, `authGuard`, `sessionExpiredInterceptor`, `errorMessageFor`, `Login`, `TicketCard`, `TicketComments` und `Dashboard` haben jeweils eigene Tests (`*.spec.ts`), die `provideHttpClientTesting()` statt echter HTTP-Anfragen nutzen: `HttpTestingController` fängt eine ausgehende Anfrage ab (`httpMock.expectOne(url)`) und beantwortet sie kontrolliert (`.flush(daten)`) – dieselbe Idee wie die reinen Funktionen im Backend, nur für Angular-Code, der HTTP-Abhängigkeiten hat, die sich nicht einfach weglassen lassen. Ein Nebenfund beim Aufsetzen: jsdom (die DOM-Umgebung, in der die Tests laufen) implementiert die imperativen Methoden des `<dialog>`-Elements (`showModal()`/`close()`) nicht – ein bekanntes Tooling-Limit, kein Anwendungsfehler, behoben mit einem minimalen Prototyp-Polyfill nur in der Testumgebung. Die CI (`frontend-tests.yml`) führt zusätzlich den Produktions-Build aus, der Template-Typfehler und die Größen-Budgets prüft. Die Node-Version steht dafür zentral in `frontend/.nvmrc` und gilt auch für `scripts/deploy.sh`: bis Oktober 2026 nutzte die Pipeline fest Node 20, mit dem Angular 22 gar nicht startet (Exit-Code 3) – jeder Lauf schlug fehl, bevor ein einziger Test lief.
+**Komponenten-/Service-Tests mit HTTP-Testbackend** – unter anderem Auth, Anmeldung, Registrierung, Erstellung, Editor, Dialog, Kommentare, Historie und Dashboard besitzen Tests. Bei HTTP-abhängigem Verhalten fängt `HttpTestingController` Anfragen ab und liefert mit `.flush(...)` kontrollierte Antworten; reine Formatierungs- oder Guardlogik benötigt nicht zwingend einen HTTP-Aufruf. Dialogmethoden werden in jsdom minimal nachgebildet, echtes Fokus- und Layoutverhalten zusätzlich mit Playwright geprüft. Die CI ist auch für Produktionsbuild und Dokumentationsprüfung konfiguriert. Die verwendete Node-Linie steht zentral in `frontend/.nvmrc`.
 
 **Zentraler HTTP-Interceptor statt Wiederholung pro Aufruf** – [credentialsInterceptor](../frontend/src/app/core/credentials-interceptor.ts) hängt `withCredentials: true` an jede ausgehende Anfrage, damit der Auth-Cookie mitgeschickt wird. Eine Angular-Dependency-Injection-Variante desselben DRY-Gedankens wie `Depends(get_db)` im Backend: die einzelnen HTTP-Aufrufe (`Auth.login`, spätere Ticket-Aufrufe) müssen sich um diesen Aspekt nicht mehr einzeln kümmern.
 
@@ -462,7 +490,7 @@ Nach dem Senden hängt die Komponente den vom Server bestätigten Kommentar dire
 
 **Fehlermeldungen nach HTTP-Status statt einer festen Meldung** – die kleine Hilfsfunktion [errorMessageFor](../frontend/src/app/core/http-error-message.ts) wählt pro Aufrufstelle eine passende Meldung: `status 0` (gar keine Antwort, Backend nicht erreichbar) überall gleich, dazu stellenspezifische Codes (`401` beim Login, `403`/`404`/`409` beim Statuswechsel, `404`/`422` bei Kommentaren). Vorher meldete etwa die Login-Seite "E-Mail oder Passwort ist falsch", auch wenn in Wahrheit der Server nicht lief. Bewusst nicht der rohe `detail`-Text aus dem Backend: der ist für Entwickler formuliert und kann sich ändern, ohne dass dabei an die Oberfläche gedacht wird.
 
-**`resource()` statt manuellem Lade-/Fehler-Zustand** – [dashboard.ts](../frontend/src/app/pages/dashboard/dashboard.ts) lädt Tickets über Angulars `resource()`-API statt eines simplen `http.get(...).subscribe(...)`. Der Unterschied: `resource()` liefert Lade- und Fehlerzustand (`isLoading()`, `error()`) automatisch als Signals mit, die sonst von Hand als zusätzliche Signals nachgebaut werden müssten. Das Template kann so direkt zwischen "lädt gerade", "Fehler" und "fertig geladen" unterscheiden (siehe `dashboard.html`), ohne eigene Zustandsverwaltung dafür. Der Lade-Hinweis hängt dabei an `status() === 'loading'` (erstes Laden, noch keine Daten), nicht an `isLoading()`: das ist auch während `reload()` true, und nach jedem Statuswechsel verschwanden Kennzahlen und Ticketliste kurz komplett (Flackern). Beim Neuladen bleibt jetzt die bisherige Liste stehen, bis die neue da ist; ein Test prüft genau diesen Zwischenzustand.
+**`resource()` für Lade- und Fehlerzustände** – [dashboard.ts](../frontend/src/app/pages/dashboard/dashboard.ts) lädt Tickets über Angulars `resource()`-API. Lade- und Fehlerzustand stehen als Signals zur Verfügung. `isInitialLoading` unterscheidet den ersten Aufruf ohne Daten von einem späteren Refresh. Ein zusätzlich gespeicherter letzter erfolgreicher Datenstand bleibt auch bei einem fehlgeschlagenen Refresh sichtbar; die Oberfläche kennzeichnet den Fehler. Tests prüfen sowohl den laufenden als auch den fehlgeschlagenen Refresh.
 
 **Session-Wiederherstellung über einen App-Initializer** – `provideAppInitializer(...)` in [app.config.ts](../frontend/src/app/app.config.ts) fragt beim Start der Anwendung einmalig `GET /auth/me` ab, bevor der Router irgendeine Route auflöst. Ohne das würde [authGuard](../frontend/src/app/core/auth/auth-guard.ts) bei einem Seiten-Reload kurzzeitig fälschlich "nicht eingeloggt" annehmen, weil das `currentUser`-Signal erst nach der (asynchronen) Antwort befüllt wäre.
 
@@ -479,17 +507,13 @@ Ehrlich zu benennen, was fehlt, ist selbst ein Qualitätsmerkmal. Hier die aktue
 | ~~`/users`-Endpunkte ungeschützt, keine E-Mail-/Passwort-Prüfung~~ | – | erledigt, siehe [Security-Review](#security-review-funde-und-behebungen) |
 | Keine Begrenzung der Login-Versuche (Rate Limiting) | Braucht zusätzliche Infrastruktur (Zähler pro IP/Konto, z.B. in Redis) | Rate Limiting im Backend (z.B. `slowapi`) oder im Reverse Proxy, zusätzlich temporäre Kontosperre nach mehreren Fehlversuchen |
 | `POST /auth/register` verrät per `409`, dass eine E-Mail bereits registriert ist | Bewusster Kompromiss zugunsten einer direkten, verständlichen Rückmeldung | Registrierung immer mit derselben Antwort bestätigen und das Ergebnis per E-Mail mitteilen (braucht E-Mail-Versand) |
-| Ein Bearbeiter (`assignee_id`) kann auch ein Employee sein; "Übernehmen" trägt den übernehmenden Agent nicht als Bearbeiter ein, und jeder Agent kann jedes Ticket als gelöst markieren – auch eines, das ein anderer übernommen hat | Fachliche Regel noch nicht festgelegt | Prüfung in `update_ticket`, dass der zugewiesene Nutzer `AGENT` oder `ADMIN` ist; `OPEN → IN_PROGRESS` setzt `assignee_id` auf den übernehmenden Nutzer; `IN_PROGRESS → RESOLVED` nur durch den Bearbeiter oder einen Admin |
+| Versionsschutz ist für direkte API-Clients optional | Die Oberfläche verwendet `expected_version`; bestehende API-Clients dürfen das Feld noch weglassen | Bei einer späteren API-Version bedingte Änderungen verbindlich machen; siehe [Versionsentscheidung](entscheidungen-workflow-und-historie.md#gleichzeitige-änderungen) |
 | Kein Token-Widerruf (nur `/auth/logout`, das löscht den Cookie, der JWT bleibt bis zum Ablauf technisch gültig) | JWTs sind zustandslos per Design (siehe Abschnitt 3) – echter Widerruf widerspricht dem Grundprinzip | entweder kurze Ablaufzeiten + Refresh-Token-Flow, oder eine serverseitige Blockliste für widerrufene Tokens |
 | `GET /tickets`, `GET /users` liefern immer die komplette (bzw. rollen-gefilterte) Liste ohne Paginierung | Für die aktuelle, kleine Testdatenmenge unkritisch | Pagination (`?limit=20&offset=0`), Standard bei jeder wachsenden REST-API |
 | ~~CORS/Cookie-Flags/Frontend-`API_URL` fest auf `localhost`~~ | – | erledigt: `FRONTEND_ORIGIN`/`COOKIE_SECURE` als Backend-Settings, Angular-`environment.ts`/`environment.prod.ts` – siehe [Deployment-Anleitung](deployment.md) |
-| Keine Registrierungs-Seite im Frontend | Bewusst zurückgestellt, um den Login-Flow zuerst fertig zu bekommen | Formular analog zu `login.ts`, ruft `POST /auth/register` auf |
-| Kommentare zeigen nur die Autor-ID ("Nutzer #3"), nur eigene Kommentare erscheinen als "Du" | `CommentRead` liefert bisher nur `author_id`; der Name steht in einer anderen Tabelle | Im Backend per SQL-`JOIN` auf `users` den Namen mitladen und als `author_name` in `CommentRead` ausliefern – ein `JOIN` für die ganze Liste statt einer Einzelabfrage pro Kommentar (vermeidet das sogenannte N+1-Problem) |
 | Kommentieren ist auch bei geschlossenen Tickets möglich | Fachlich noch nicht entschieden – in vielen ITSM-Tools ist ein geschlossenes Ticket schreibgeschützt | Prüfung in `create_comment` (z.B. `409 Conflict` bei `CLOSED`) plus ausgeblendetes Formular im Frontend |
 | Neue Kommentare anderer erscheinen erst beim erneuten Öffnen des Popups | Für den aktuellen Umfang ausreichend, jede Echtzeit-Lösung bringt eigene Infrastruktur mit | periodisches Nachladen (Polling) oder serverseitige Push-Mechanismen (Server-Sent Events, WebSockets) |
-| Kein Bearbeiten von Titel/Beschreibung/Priorität/Zuweisung über die UI (Erstellen und Statuswechsel gehen bereits) | `PATCH /tickets/{id}` existiert bereits im Backend, UI-Anbindung fehlt noch | Formular analog zu `/tickets/new`, vorausgefüllt mit den aktuellen Werten |
-| Noch keine echten HTTP-Integrationstests (nur Unit-Tests ohne Datenbank: `security.py`, `ticket_lifecycle.py`, `ticket_access.py`, Schemas, Fehler-Zuordnung, Health-Checks, Model-Metadaten) | Bisheriger Testfokus lag bewusst auf isolierter, ohne DB testbarer Logik | FastAPIs `TestClient` + ein Test-Postgres-Container in der CI. Bewusst nicht SQLite: es würde genau die Unterschiede verdecken, die hier schon zu Fehlern geführt haben (Fremdschlüssel ohne Prüfung, Zeitzonen, ENUM-Sortierung) |
-| Kein Verlauf der Statuswechsel (wer hat wann übernommen, gelöst, abgelehnt) – `resolved_at`/`closed_at` halten nur den jeweils letzten Zeitpunkt | Für den bisherigen Umfang reichten die Zeitstempel am Ticket | eigene, unveränderliche Tabelle `ticket_events` (Ticket, Nutzer, alter/neuer Status, Zeitpunkt), geschrieben in `apply_status_transition` – dasselbe Audit-Trail-Prinzip wie bei den Kommentaren |
+| Historie ist kein revisionssicheres Archiv | API nur lesbar, aber Datenbankzugriffe und Cascade-Löschung eines Tickets bleiben möglich | Bei entsprechender Anforderung separates unveränderliches Archiv und Aufbewahrungsregeln |
 | `requirements.txt` pinnt nur Untergrenzen (`fastapi>=0.115`), keine exakten Versionen | Beim Projektstart bewusst einfach gehalten | für reproduzierbare Installationen exakte Versionen pinnen (`==`) oder ein Lockfile-Tool wie `pip-compile`/`uv` einsetzen – ein frischer `pip install` kann sonst Monate später eine deutlich neuere, potenziell inkompatible Version ziehen (bei einer lokalen Testinstallation im August 2026 beobachtet: FastAPI 0.141 statt der beim Projektstart verwendeten Version) |
 
 ---
@@ -499,14 +523,18 @@ Ehrlich zu benennen, was fehlt, ist selbst ein Qualitätsmerkmal. Hier die aktue
 1. ~~`/auth/register`, `/auth/login`-Endpunkte~~ – erledigt
 2. ~~Ticket-Endpunkte gegen den JWT absichern (Authentifizierung)~~ – erledigt, `get_current_user`-Dependency
 3. ~~Ticket-Lifecycle-Regeln + rollenbasierte Autorisierung für Status-Übergänge~~ – erledigt, `app/services/ticket_lifecycle.py` + `PATCH /tickets/{id}/status`
-4. ~~Rollenprüfung auf die restlichen Ticket-Endpunkte ausweiten~~ – erledigt: `require_roles`-Dependency (`DELETE`/generisches `PATCH` nur `ADMIN`/`AGENT`) + Sichtbarkeits-Filterung (`EMPLOYEE` sieht nur eigene Tickets)
+4. ~~Rollenprüfung auf die restlichen Ticket-Endpunkte ausweiten~~ – erledigt: DELETE nur Admin, generischer PATCH Agent/Admin; Mitarbeitende sehen nur eigene Tickets
 5. ~~Frontend-Login an die echte API anbinden~~ – erledigt: HttpOnly-Cookie-Auth, `Auth`-Service, Login-Seite, Route-Guard
-6. ~~Dashboard an `GET /tickets` anbinden~~ – erledigt: `TicketsService` + `resource()`, 4 Status-Tabs, Kennzahlen live berechnet
+6. ~~Dashboard an `GET /tickets` anbinden~~ – erledigt: `TicketsService` + `resource()`, vier Statusansichten plus „Alle Tickets“, Kennzahlen aus geladenen Daten berechnet
 7. ~~Ticket erstellen über die UI, Ticket-Detailansicht~~ – erledigt: `/tickets/new`, klickbare Ticket-Karten öffnen ein Detail-Popup (natives `<dialog>`) mit Beschreibung
 8. ~~Status ändern über die UI~~ – erledigt: Backend berechnet `allowed_transitions` pro Ticket/Nutzer, Frontend zeigt nur passende Buttons (Claim/Lösen/Schließen/Ablehnen)
 9. ~~Ticket-Kommentare~~ – erledigt: `comments`-Tabelle + Migration, `GET/POST /tickets/{id}/comments` mit derselben Sichtbarkeitsregel wie das Ticket (`ticket_access.py`), Kommentarverlauf + Eingabeformular im Detail-Popup (`TicketComments`)
-10. Registrierungs-Seite im Frontend
-11. ~~Frontend-Komponenten-/Service-Tests~~ – erledigt: `Auth`, `authGuard`, `TicketCard`, `TicketComments`, `Dashboard`, eigene CI-Pipeline (`frontend-tests.yml`). Backend: weiterhin nur Unit-Tests – echte HTTP-Integrationstests (`TestClient` + Test-Datenbank) noch offen
-12. Politur, Deployment-Feinschliff
+10. ~~Registrierungs-Seite im Frontend~~ – erledigt: `/register`, Validierung und Rückkehr zur Anmeldung
+11. ~~Frontend- und HTTP-Integrationstests~~ – erledigt: Angular-Komponenten/Services, PostgreSQL-Workflows mit `TestClient`, konkurrierende Übernahmen und Playwright auf Desktop/Mobile; drei CI-Workflows
+12. ~~Vorführbare lokale Demo~~ – erledigt: ein Compose-Befehl, drei Rollen, zwölf Beispieltickets, Screenshots und dokumentierte Grenzen
+13. Login-Rate-Limiting, E-Mail-Verifikation/Passwort-Reset und Token-Widerruf
+14. ~~Ticket-Inhalte über die Oberfläche bearbeiten~~ – erledigt: Editor mit Validierung, Versionsschutz, Entwurfsbestätigung und Tests
+15. Serverseitige Suche und Pagination
+16. Öffentliches HTTPS-Deployment mit eigener Konfiguration, Betrieb und Überwachung
 
 Ausführlicher Phasenplan: siehe die Commit-Historie (`git log`) – jeder Phasen-Commit beschreibt, was dazukam und warum.

@@ -1,81 +1,159 @@
 # SmartDesk
 
-SmartDesk ist ein IT-Ticket-Management-System: Mitarbeitende erfassen Support-Anfragen als Tickets, Support-Mitarbeitende bearbeiten sie über einen Status-Lebenszyklus (offen → in Bearbeitung → gelöst → geschlossen).
+[![Backend](https://github.com/okankpl/SmartDesk/actions/workflows/backend-tests.yml/badge.svg)](https://github.com/okankpl/SmartDesk/actions/workflows/backend-tests.yml)
+[![Frontend](https://github.com/okankpl/SmartDesk/actions/workflows/frontend-tests.yml/badge.svg)](https://github.com/okankpl/SmartDesk/actions/workflows/frontend-tests.yml)
+[![Browser Tests](https://github.com/okankpl/SmartDesk/actions/workflows/demo-e2e.yml/badge.svg)](https://github.com/okankpl/SmartDesk/actions/workflows/demo-e2e.yml)
 
-Warum welche Technologie gewählt wurde, wichtige Konzepte (Docker, Hashing, JWT, ...) und alle Architekturentscheidungen ausführlich erklärt: siehe [docs/architektur-und-konzepte.md](docs/architektur-und-konzepte.md).
+Ein Full-Stack-Projekt für internen IT-Support: Mitarbeitende melden Anliegen, Agents übernehmen die Bearbeitung und Admins prüfen den Abschluss. SmartDesk verbindet **Angular, FastAPI und PostgreSQL** mit rollenbasierten Zugriffsregeln, einem geregelten Ticket-Lebenszyklus und einer nachvollziehbaren Änderungshistorie.
 
-## Struktur
+![SmartDesk: Ticketübersicht mit Kennzahlen, Prioritäten und Filtern](docs/images/dashboard.png)
 
-- `frontend/` – Angular-Anwendung (Standalone Components, Signals)
-- `backend/` – FastAPI-Anwendung (REST-API, PostgreSQL über SQLAlchemy + Alembic)
+[Mobile Ansicht ansehen](docs/images/mobile.png)
 
-## Aktueller Stand
+**Dokumentation:** [Architektur, technische Entscheidungen und Betrieb](docs/README.md). Für den ersten Eindruck genügt die Demo unten; die technischen Dokumente erklären die Umsetzung und ihre Grenzen.
 
-- **Ticket-CRUD** – `GET/POST/PATCH/DELETE /tickets`, mit Prioritäts- und Status-Enums, Fremdschlüsseln zu `User`
-- **Auth** – `POST /auth/register`, `POST /auth/login` (JWT via bcrypt-Passwort-Hashing), getestet
-- **Ticket-Endpunkte sind geschützt** – `/tickets` verlangt einen gültigen JWT (`Authorization: Bearer <token>`)
-- **Ticket-Lifecycle mit Rollenregeln** – `PATCH /tickets/{id}/status` prüft Status-Übergänge gegen Rollen (z.B. nur `admin` darf final schließen), getestet
-- **Rollenbasierte Autorisierung auf allen Ticket-Endpunkten** – `employee` sieht nur eigene Tickets, `PATCH`/`DELETE` sind `agent`/`admin` vorbehalten, getestet
-- **Login-Flow steht** – Frontend loggt sich gegen das echte Backend ein, Session per HttpOnly-Cookie (kein Token im Frontend-JS lesbar), Route-Guard schützt das Dashboard
-- **Dashboard zeigt echte Daten** – Kennzahlen und die vier Status-Ansichten kommen live aus `GET /tickets`, nicht mehr aus Mock-Daten
-- **Ticket erstellen, Details ansehen & Status ändern über die Oberfläche** – `/tickets/new`, anklickbare Ticket-Karten öffnen ein Detail-Popup mit Beschreibung und passenden Aktions-Buttons (Claim/Lösen/Schließen/Ablehnen) – welche Buttons erscheinen, berechnet das Backend pro Rolle/Status, nicht das Frontend
-- **Ticket-Kommentare** – `GET/POST /tickets/{id}/comments`, im Detail-Popup als chronologischer Verlauf mit Eingabefeld; wer ein Ticket nicht sehen darf, sieht auch dessen Kommentare nicht (gleiche Regel, zentral in `app/services/ticket_access.py`); Kommentare sind bewusst unveränderlich (Nachvollziehbarkeit)
-- **Frontend-Komponenten-/Service-Tests** – `Auth`, `authGuard`, `TicketCard`, `TicketComments`, `Dashboard`, mit gemocktem `HttpClient`, eigene CI-Pipeline
-- **Deployment vorbereitet** – produktionsfähige Konfiguration (konfigurierbare CORS-Origin/Cookie-Flags, Angular-Environments), VPS-Anleitung samt Betriebs-Skripten (`scripts/`), lokal als kompletter Produktions-Stack getestet: Deployment mit Migration vor dem Umschalten, Readiness-Check `/health/ready` (prüft auch die Datenbank), Backup und Wiederherstellung, komprimierte Auslieferung und Browser-Caching über Caddy
-- **Robustheit** – Zeitstempel mit Zeitzone (korrekte Ortszeit im Browser), Tickets in fester Reihenfolge (Priorität, dann Alter), automatische Weiterleitung zum Login bei abgelaufener Sitzung, Fehlermeldungen passend zur tatsächlichen Ursache, Wiederverbindung nach einem Datenbank-Neustart, fachliche Fehler im Backend unabhängig von HTTP (`app/services/errors.py`)
-- **Security-Review durchgeführt** – u.a. ungeschützten `/users`-Endpunkt abgesichert, Mass Assignment beim Ticket-Status und ein Timing-Leck beim Login geschlossen, Eingabevalidierung, Start-Prüfung des `SECRET_KEY`, Sicherheits-Header (CSP, HSTS), Container ohne root-Rechte – Details und alle Funde in [Abschnitt 6 der Architektur-Doku](docs/architektur-und-konzepte.md#security-review-funde-und-behebungen)
+## Demo starten
 
-Nächste Schritte: Bearbeiter-Regeln (nur Agents/Admins, "Übernehmen" trägt sich ein, nur der Bearbeiter löst), Begrenzung der Login-Versuche, Passwort-Reset per E-Mail, Autorennamen bei Kommentaren, Registrierungs-Seite im Frontend, echte HTTP-Integrationstests gegen PostgreSQL, VPS-Deployment tatsächlich durchführen.
-
-## Backend lokal starten
-
-Voraussetzung: [Docker Desktop](https://www.docker.com/products/docker-desktop/) ist installiert und läuft.
+Voraussetzung: **Docker mit Compose**, beispielsweise Docker Desktop. Im Projektverzeichnis:
 
 ```bash
-cp .env.example .env   # einmalig, falls noch nicht vorhanden
-docker compose up --build
+docker compose -f docker-compose.demo.yml up -d --build
 ```
 
-Danach:
-- API-Dokumentation (Swagger UI): http://localhost:8000/docs
-- Health-Check: http://localhost:8000/health
+Anschließend **[localhost:8080](http://localhost:8080)** öffnen. Der erste Build lädt die Abhängigkeiten; Migrationen und Demo-Daten werden automatisch angelegt. Weder Node.js noch Python oder eine `.env` sind für diese Demo nötig.
 
-## Frontend lokal starten
+| Rolle | E-Mail | Was sich ausprobieren lässt |
+| --- | --- | --- |
+| Mitarbeitende | `employee@example.com` | Eigene Tickets erstellen, kommentieren und Lösungen ablehnen |
+| Support | `agent@example.com` | Gesamte Warteschlange sehen, Tickets übernehmen und eigene Bearbeitungen lösen |
+| Administration | `admin@example.com` | Bearbeiter zuweisen, eingreifen und gelöste Tickets final schließen |
 
-Voraussetzung: Node.js 24 (Version steht in `frontend/.nvmrc`; Angular 22 läuft erst ab Node 22.22 bzw. 24.15).
+**Passwort für alle drei Demo-Konten:** `SmartDesk-Demo26!`
+
+Die Demo enthält zwölf fiktive Supportfälle in allen vier Status mit Kommentaren und Historie. Die bekannte Anmeldung gilt ausschließlich für diesen lokal gebundenen Demo-Stack. Er nutzt ein eigenes Volume und verändert die Entwicklungsdatenbank nicht. Ein erneuter Start erhält die Daten; die Befüllung überschreibt keine bestehenden Konten.
+
+**Kurzer Rundgang:** Als Support ein offenes Ticket übernehmen und unter „In Bearbeitung“ lösen. Als Mitarbeitende kann die Lösung abgelehnt werden; als Admin lässt sie sich final schließen. Im Detaildialog sind Autorennamen, Bearbeiter und der Änderungsverlauf sichtbar.
+
+```bash
+# Demo stoppen, Daten behalten
+docker compose -f docker-compose.demo.yml down
+```
+
+API-Dokumentation in der Demo: [localhost:8080/api/docs](http://localhost:8080/api/docs).
+
+## Funktionsumfang
+
+- **Ticket-Workflow:** offen → in Bearbeitung → gelöst → geschlossen; Ablehnung einer Lösung führt zurück in Bearbeitung.
+- **Berechtigungen:** Mitarbeitende sehen ausschließlich eigene Tickets. Der Server berechnet die verfügbaren Aktionen pro Ticket und Nutzer und prüft jeden Schreibzugriff erneut.
+- **Verbindliche Zuständigkeit:** Übernehmen trägt den Agent ein. Andere Agents können das Ticket weder übernehmen noch lösen; Admins können delegieren und eingreifen.
+- **Änderungsverlauf:** Erstellen, Statuswechsel und Änderungen werden mit handelnder Person, Zeitpunkt und Vorher-/Nachher-Werten gespeichert. Ticketänderung und Historieneintrag bilden eine Transaktion.
+- **Zusammenarbeit:** Kommentare mit Autorennamen; Inhalte werden als Text dargestellt. Kommentar- und Historienzugriff folgen der Sichtbarkeit des Tickets.
+- **Arbeitsoberfläche:** kompakte Listen- oder Kartenansicht, statusübergreifende Suche nach Text/Nummer/Person, kombinierbare Filter und Sortierung nach Priorität oder Datum. Kennzahlen, Ergebniszahlen und leere Ansichten geben direkt Rückmeldung.
+- **Bearbeitung ohne Kontextverlust:** Statuswechsel und Zuweisungen halten den Detaildialog offen; ein Kommentarentwurf bleibt dabei erhalten. Beschreibung, Kommentare und Verlauf scrollen gemeinsam, während Kopf und Aktionsleiste sichtbar bleiben.
+- **Inhalte bearbeiten:** Support und Administration ändern Titel, Beschreibung und Priorität direkt im Detaildialog. Der Editor schützt vor dem Verwerfen ungespeicherter Änderungen und erkennt veraltete Ticketversionen. Fehlgeschlagene Speicherungen erhalten den Entwurf; erfolgreiche Änderungen erscheinen in der Historie.
+- **Konten:** Registrierung und Anmeldung, bcrypt-Passwörter, JWT im HttpOnly-Cookie, Wiederherstellung und Ablauf einer Sitzung.
+- **Betrieb:** automatisierte Migrationen, getrennte Demo-/Test-/Produktionskonfiguration, Non-root-Backend, Caddy, Readiness-Check und Backup-/Deployment-Skripte.
+
+![SmartDesk: Ticketdetail mit Kommentaren und Änderungshistorie](docs/images/ticket-detail.png)
+
+## Technische Entscheidungen
+
+```mermaid
+flowchart LR
+    Browser[Angular / Signals] -->|HTTP / HttpOnly-Cookie| Caddy[Caddy]
+    Caddy -->|Statische Dateien| SPA[Angular Production Build]
+    Caddy -->|/api| API[FastAPI / Pydantic]
+    API --> Rules[Rollen / Workflow / Zuweisung]
+    API --> ORM[SQLAlchemy]
+    ORM --> DB[(PostgreSQL)]
+    Migrations[Alembic] --> DB
+```
+
+| Entscheidung | Begründung |
+| --- | --- |
+| Modularer Backend-Monolith | Router, Eingabeschemas, Modelle und Fachregeln haben getrennte Aufgaben, ohne zusätzliche Dienste betreiben zu müssen. |
+| PostgreSQL auch für Integrationstests | Fremdschlüssel, JSONB, ENUMs, Zeitzonen und Zeilensperren werden mit derselben Datenbanktechnik geprüft wie im Betrieb. |
+| Serverseitige Rollen- und Objektprüfung | Eine ausgeblendete Schaltfläche ist kein Zugriffsschutz; auch direkte API-Anfragen müssen die Regeln einhalten. |
+| `SELECT … FOR UPDATE` bei Ticketänderungen | Zwei gleichzeitige Übernahmen werden serialisiert. Nur ein Agent gewinnt; die zweite Anfrage erhält `409`. |
+| Gemeinsame Transaktion für Ticket und Ereignis | Fehlgeschlagene Aktionen hinterlassen keinen scheinbar erfolgreichen Historieneintrag. |
+| Versionsprüfung bei Inhaltsänderungen | Der Editor sendet die gelesene Ticketversion mit. Ein veralteter Stand wird unter derselben Zeilensperre mit `409` abgewiesen, ohne neuere Inhalte oder die Historie zu überschreiben. |
+| Explizite Demo-Befüllung | Bekannte Demo-Zugangsdaten entstehen nur bei `DEMO_MODE=true`, getrennt von der produktiven Konfiguration. |
+| Bedarfsgesteuertes Frontend | Seiten werden als eigene Route-Chunks geladen. Filter, Kennzahlen und Ticketvorschau sind eigenständige Präsentationskomponenten; der Detaildialog lädt Kommentare und Historie erst beim Öffnen. |
+
+Die vollständige [Architektur und Spezifikation](docs/architektur-und-konzepte.md), die [Entscheidungen zu Zuständigkeit und Historie](docs/entscheidungen-workflow-und-historie.md) und die [Deployment-Anleitung](docs/deployment.md) beschreiben Details und Grenzen.
+
+## Qualität prüfen
+
+Backend einschließlich Migrationen, Modelldrift, Unit-/HTTP-Tests, konkurrierender Übernahmen und Ruff, mit einer separaten Testdatenbank:
+
+```bash
+docker compose -f docker-compose.demo.yml --profile test run --build --rm tests
+```
+
+Die Tests verändern keine Demo-Daten. Die PostgreSQL-Integrationstests benötigen eine explizite `TEST_DATABASE_URL` mit Datenbankname auf `_test`; ohne diese werden sie lokal übersprungen. Die CI führt sie immer aus.
+
+Frontend, mit **Node.js 24** (siehe `frontend/.nvmrc`):
 
 ```bash
 cd frontend
-npm install
+npm ci
+npm test -- --watch=false
+npm run build
+
+# Browser-Tests gegen die laufende Demo: Desktop und Mobile
+npx playwright install chromium
+npm run test:e2e
+```
+
+Dokumentation, nach `npm ci` im Frontend, aus dem Projektverzeichnis:
+
+```powershell
+# Prüft den Dokumentationsprüfer selbst und danach alle lokalen Verweise.
+node --test scripts/check-docs.test.mjs
+node scripts/check-docs.mjs
+```
+
+GitHub Actions ist für Backendprüfungen mit PostgreSQL, Angular-Tests samt Produktionsbuild, Dokumentationslinks sowie einen frisch gebauten Demo-Stack mit Playwright konfiguriert. TypeScript und Angular-Templates werden im Strict-Modus geprüft. Dependabot ist für npm, Python, Docker und Actions eingerichtet. Ein lokaler Prüferfolg ist kein Beleg für einen bereits gelaufenen GitHub-Workflow.
+
+## Lokal entwickeln
+
+Die schnelle Demo und die Entwicklungsumgebung sind voneinander getrennt. Für Änderungen mit Live-Reload:
+
+```bash
+cp .env.example .env
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+Den erzeugten Wert in `.env` als `SECRET_KEY` eintragen. Der öffentliche Platzhalter wird beim Start absichtlich abgelehnt.
+
+```bash
+docker compose up -d --build
+docker compose exec backend alembic upgrade head
+cd frontend
+npm ci
 npm start
 ```
 
-Läuft danach unter http://localhost:4200. Es gibt noch keine Registrierungs-Seite im Frontend – einen Test-Account vorher über die Swagger UI anlegen (`POST /auth/register` unter http://localhost:8000/docs), dann damit auf http://localhost:4200/login einloggen. Für Test-Adressen eine Domain wie `@example.com` verwenden: reservierte Endungen wie `.local` oder `.test` lehnt die E-Mail-Prüfung ab, weil sie keine echten E-Mails empfangen können (Passwort: mindestens 8 Zeichen).
+Frontend: [localhost:4200](http://localhost:4200). API: [localhost:8000/docs](http://localhost:8000/docs). Konten lassen sich über `/register` erstellen; neue Konten erhalten immer die Rolle `employee`. Für den sofortigen Vergleich aller Rollen dient die separate Demo.
 
-## Tests ausführen
-
-```bash
-# Backend (im backend-Container)
-docker compose exec backend pytest -v
-
-# Frontend
-cd frontend
-npm test
+```text
+backend/app/core/       Konfiguration, Auth, Datenbank, Fehlerbehandlung
+backend/app/models/     Persistenzmodelle
+backend/app/schemas/    API-Verträge und Eingabevalidierung
+backend/app/services/   Fachregeln und Historieneinträge
+backend/app/routers/    HTTP-Endpunkte
+backend/alembic/        Versionierte Datenbankmigrationen
+backend/tests/          Unit- und PostgreSQL-Integrationstests
+frontend/src/app/       Angular-Seiten, Komponenten und Services
+frontend/e2e/           Browser-Tests für Desktop und Mobile
+scripts/               Deployment, Backup und Healthcheck
+docs/                  Spezifikation, Architektur und Betriebsanleitung
 ```
 
-Beide laufen automatisch bei jedem Push/PR auf `main` über GitHub Actions (`.github/workflows/backend-tests.yml`, `.github/workflows/frontend-tests.yml`); die Frontend-Pipeline prüft zusätzlich den Produktions-Build.
+## Grenzen und weitere Arbeit
 
-## Datenbank-Migrationen (Alembic)
+SmartDesk ist ein vorführbares Entwicklungs- und Portfolio-Projekt. Ein öffentliches Live-Deployment ist hier nicht vorausgesetzt. Für einen Einsatz mit echten Nutzerdaten stehen insbesondere Login-Rate-Limiting, E-Mail-Verifikation/Passwort-Reset, Token-Widerruf und serverseitige Pagination aus. Die Suche filtert aktuell die bereits rollenbeschränkt geladene Ticketliste im Browser. Die Oberfläche sendet bei Inhaltsänderungen und Zuweisungen immer `expected_version`; direkte API-Clients können dieses Feld aus Kompatibilitätsgründen noch weglassen und erhalten dann keinen Schutz vor veralteten Eingaben.
 
-Migrationen laufen im `backend`-Container:
+Die Historie ist über die API nur lesbar und beginnt für bestehende Tickets mit Änderungen nach ihrer Einführung. Sie ist kein revisionssicheres Archiv: Datenbank-Administratoren können Daten ändern, und ein Admin kann ein Ticket samt Kommentaren und Historie löschen. [Weitere bewusste Einschränkungen](docs/architektur-und-konzepte.md#9-bewusste-einschränkungen--offene-punkte).
 
-```bash
-docker compose exec -u root backend alembic revision --autogenerate -m "beschreibung"
-docker compose exec backend alembic upgrade head
-```
-
-`-u root` nur beim Erzeugen einer neuen Migration: der Backend-Container läuft sonst als eingeschränkter Benutzer ohne Schreibrechte auf den Quellcode (siehe `backend/Dockerfile`). Eine generierte Migration vor dem `upgrade` immer durchlesen – Autogenerate erkennt nicht alles (z.B. Umbenennungen) und kann unbenannte Constraints nicht gezielt löschen.
-
-## Deployment
-
-Anleitung für ein Deployment auf einem eigenen VPS (Docker, Caddy mit automatischem HTTPS): siehe [docs/deployment.md](docs/deployment.md).
+Das Projekt wird mit KI-Unterstützung entwickelt. Technische Entscheidungen, Grenzen und automatisierte Prüfungen sind im Repository nachvollziehbar dokumentiert.

@@ -34,7 +34,7 @@ jobs:
           # unter Node 20 sofort mit Exit-Code 3 ab - jeder Lauf dieses
           # Workflows war deshalb rot, ohne dass ein einziger Test lief.
           node-version-file: frontend/.nvmrc
-          # Cached node_modules zwischen CI-Laeufen (ueber den Inhalt von
+          # Cached den npm-Paketcache zwischen CI-Laeufen (ueber den Inhalt von
           # package-lock.json identifiziert) - macht spaetere Laeufe
           # deutlich schneller, weil npm ci nicht jedes Mal alles neu
           # herunterladen muss.
@@ -51,6 +51,15 @@ jobs:
       # von Anfang an sauber geloest.
       - name: Abhaengigkeiten installieren
         run: npm ci
+
+      - name: Sicherheitspruefung der Abhaengigkeiten
+        run: npm audit --audit-level=high
+
+      - name: Dokumentationspruefer testen
+        run: node --test ../scripts/check-docs.test.mjs
+
+      - name: Dokumentationslinks pruefen
+        run: node ../scripts/check-docs.mjs
 
       # --watch=false: einmal laufen und mit Erfolg/Fehler beenden, statt (wie
       # lokal bei "npm test") auf Datei-Aenderungen zu warten.
