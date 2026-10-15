@@ -11,6 +11,7 @@ from app.core.database import Base
 # neuen Model also hier ergaenzen.
 from app.models.comment import Comment  # noqa: F401
 from app.models.ticket import Ticket  # noqa: F401
+from app.models.ticket_event import TicketEvent  # noqa: F401
 from app.models.user import User  # noqa: F401
 
 config = context.config

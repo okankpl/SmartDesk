@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -48,7 +49,13 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> User:
         role=UserRole.EMPLOYEE,
     )
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        if getattr(exc.orig, "sqlstate", None) == "23505":
+            raise HTTPException(status_code=409, detail="E-Mail bereits registriert") from exc
+        raise
     db.refresh(user)
     return user
 

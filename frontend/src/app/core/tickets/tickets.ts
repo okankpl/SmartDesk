@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 
 import { API_URL } from '../api-url';
 import { Ticket, TicketPriority, TicketStatus } from './ticket';
+import { TicketEvent } from './ticket-event';
 
 // Nur die Felder, die der Client beim Erstellen wirklich mitgeben darf - kein
 // status (startet immer auf "open", serverseitig per Default), kein
@@ -13,6 +14,10 @@ export interface NewTicket {
   title: string;
   description: string | null;
   priority: TicketPriority;
+}
+
+export interface TicketContentUpdate extends Partial<NewTicket> {
+  expected_version: number;
 }
 
 // providedIn: 'root' -> eine einzige, geteilte Instanz fuer die ganze App
@@ -42,11 +47,27 @@ export class TicketsService {
     return this.http.post<Ticket>(`${API_URL}/tickets`, newTicket);
   }
 
+  get(ticketId: number): Observable<Ticket> {
+    return this.http.get<Ticket>(`${API_URL}/tickets/${ticketId}`);
+  }
+
+  updateContent(ticketId: number, changes: TicketContentUpdate): Observable<Ticket> {
+    return this.http.patch<Ticket>(`${API_URL}/tickets/${ticketId}`, changes);
+  }
+
   // Ruft PATCH /tickets/{id}/status auf. Ob dieser Aufruf ueberhaupt Sinn
   // ergibt (also ob newStatus in ticket.allowed_transitions steht), prueft
   // NICHT dieser Service - das entscheidet die aufrufende Komponente anhand
   // der vom Backend gelieferten allowed_transitions (siehe ticket-card.ts).
   updateStatus(ticketId: number, newStatus: TicketStatus): Observable<Ticket> {
     return this.http.patch<Ticket>(`${API_URL}/tickets/${ticketId}/status`, { status: newStatus });
+  }
+
+  history(ticketId: number): Observable<TicketEvent[]> {
+    return this.http.get<TicketEvent[]>(`${API_URL}/tickets/${ticketId}/history`);
+  }
+
+  assign(ticketId: number, assigneeId: number | null, expectedVersion: number): Observable<Ticket> {
+    return this.http.patch<Ticket>(`${API_URL}/tickets/${ticketId}`, { assignee_id: assigneeId, expected_version: expectedVersion });
   }
 }

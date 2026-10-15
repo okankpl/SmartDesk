@@ -62,6 +62,10 @@ export class Auth {
   // deklarieren und es dann im Konstruktor-Koerper zuzuweisen.
   constructor(private readonly http: HttpClient) {}
 
+  register(payload: { full_name: string; email: string; password: string }): Observable<CurrentUser> {
+    return this.http.post<CurrentUser>(`${API_URL}/auth/register`, payload);
+  }
+
   /**
    * Loggt ein und laedt danach den aktuellen Nutzer nach. Das Backend gibt im
    * JSON-Body zwar zusaetzlich einen access_token zurueck (fuer Swagger UI/curl),

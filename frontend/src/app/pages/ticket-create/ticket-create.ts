@@ -3,6 +3,7 @@ import { Router, RouterLink } from '@angular/router';
 import { errorMessageFor } from '../../core/http-error-message';
 import { TicketsService } from '../../core/tickets/tickets';
 import { TicketPriority } from '../../core/tickets/ticket';
+import { LucideArrowLeft, LucidePlus, LucideCircleAlert } from '@lucide/angular';
 
 // Feste Liste der Prioritaets-Optionen fuers <select>-Dropdown im Template,
 // mit deutscher Beschriftung. "value: TicketPriority" zwingt TypeScript dazu,
@@ -21,7 +22,7 @@ const PRIORITY_OPTIONS: { value: TicketPriority; label: string }[] = [
   // (routerLink="/dashboard") - Standalone-Komponenten muessen jede benutzte
   // Direktive/Pipe/Komponente hier explizit auflisten, es gibt kein
   // automatisches "alles verfuegbar" wie frueher bei NgModules.
-  imports: [RouterLink],
+  imports: [RouterLink, LucideArrowLeft, LucidePlus, LucideCircleAlert],
   templateUrl: './ticket-create.html',
   styleUrl: './ticket-create.scss',
 })
@@ -42,9 +43,11 @@ export class TicketCreate {
   protected readonly priority = signal<TicketPriority>('medium');
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly isSubmitting = signal(false);
+  protected readonly titleError = signal<string | null>(null);
 
   protected onTitleInput(event: Event): void {
     this.title.set((event.target as HTMLInputElement).value);
+    if (this.title().trim()) this.titleError.set(null);
   }
 
   protected onDescriptionInput(event: Event): void {
@@ -63,6 +66,14 @@ export class TicketCreate {
 
   protected submit(event: Event): void {
     event.preventDefault();
+    if (this.isSubmitting()) return;
+    const form = event.target as HTMLFormElement;
+    if (!form.reportValidity()) return;
+    if (!this.title().trim()) {
+      this.titleError.set('Bitte einen Titel eingeben.');
+      (form.elements.namedItem('title') as HTMLInputElement).focus();
+      return;
+    }
     this.errorMessage.set(null);
     this.isSubmitting.set(true);
 
@@ -73,18 +84,18 @@ export class TicketCreate {
 
     this.ticketsService
       .create({
-        title: this.title(),
+        title: this.title().trim(),
         description: trimmedDescription.length > 0 ? trimmedDescription : null,
         priority: this.priority(),
       })
       .subscribe({
-        next: () => {
+        next: (ticket) => {
           this.isSubmitting.set(false);
           // Zurueck zum Dashboard: die dortige resource() laedt beim erneuten
           // Mounten der Komponente automatisch neu (Angular baut Dashboard bei
           // einer Navigation weg und zurueck frisch auf) - kein manuelles
           // "Liste neu laden" noetig.
-          this.router.navigateByUrl('/dashboard');
+          void this.router.navigate(['/dashboard'], { queryParams: { created: ticket.id } });
         },
         error: (error: unknown) => {
           this.isSubmitting.set(false);

@@ -7,16 +7,15 @@
 import { Component, inject, signal } from '@angular/core';
 // ActivatedRoute beschreibt die gerade aktive Route samt URL-Parametern -
 // hier gebraucht, um "?reason=session-expired" aus der URL zu lesen.
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Auth } from '../../core/auth/auth';
 import { errorMessageFor } from '../../core/http-error-message';
+import { LucideTicketCheck, LucideEye, LucideEyeOff, LucideArrowRight } from '@lucide/angular';
 
 @Component({
   selector: 'app-login',
-  // "imports" listet andere Standalone-Komponenten/Direktiven/Pipes auf, die
-  // im Template (login.html) verwendet werden duerfen - hier leer, weil das
-  // Formular ganz ohne Angulars FormsModule auskommt (siehe Kommentare unten).
-  imports: [],
+  // RouterLink verbindet die Anmeldung mit der Registrierung.
+  imports: [RouterLink, LucideTicketCheck, LucideEye, LucideEyeOff, LucideArrowRight],
   templateUrl: './login.html',
   styleUrl: './login.scss',
 })
@@ -35,6 +34,7 @@ export class Login {
   // waehrend man auf der Login-Seite ist nicht mehr aendert. Deshalb auch
   // kein Signal: der Wert wird einmal gelesen und bleibt fest.
   protected readonly sessionExpired = this.route.snapshot.queryParamMap.get('reason') === 'session-expired';
+  protected readonly accountCreated = this.route.snapshot.queryParamMap.get('registered') === '1';
 
   // Eigener, lokaler Formular-Zustand als Signals statt Angulars
   // FormsModule/ReactiveFormsModule - bei nur zwei simplen Textfeldern
@@ -45,6 +45,7 @@ export class Login {
   protected readonly password = signal('');
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly isSubmitting = signal(false);
+  protected readonly passwordVisible = signal(false);
 
   // Wird bei jedem Tastendruck im E-Mail-Feld aufgerufen (siehe (input)-Bindung
   // in login.html). event.target ist laut TypeScript nur ein generisches
@@ -62,6 +63,7 @@ export class Login {
     // Verhindert den nativen Formular-Submit (kompletter Seiten-Reload) -
     // stattdessen soll Angular die Anfrage per HttpClient im Hintergrund senden.
     event.preventDefault();
+    if (this.isSubmitting()) return;
 
     this.errorMessage.set(null);
     this.isSubmitting.set(true);

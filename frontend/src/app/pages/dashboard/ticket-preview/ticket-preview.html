@@ -1,0 +1,13 @@
+<article class="ticket-card" [class.ticket-card--compact]="compact()" [class.ticket-card--highlighted]="highlighted()">
+  <button type="button" class="ticket-card__trigger" (click)="openTicket.emit()" [attr.aria-label]="'Ticket SD-' + ticket().id.toString().padStart(4, '0') + ': ' + ticket().title">
+    <span class="ticket-card__subject">
+      <span class="ticket-card__number">SD-{{ ticket().id.toString().padStart(4, '0') }}<svg lucideArrowUpRight [size]="13" class="open-indicator"></svg></span>
+      <strong class="ticket-card__title">{{ ticket().title }}</strong>
+      <span class="ticket-card__summary">{{ ticket().description || 'Keine Beschreibung vorhanden.' }}</span>
+    </span>
+    <span class="ticket-card__status status-badge status-badge--{{ ticket().status }}">{{ statusLabel() }}</span>
+    <span class="ticket-card__priority priority-badge priority-badge--{{ ticket().priority }}">{{ priorityLabel() }}</span>
+    <span class="ticket-card__assignee" [class.unassigned]="!ticket().assignee_id"><svg lucideUserRound [size]="14"></svg><span>{{ ticket().assignee_name || 'Nicht zugewiesen' }}</span></span>
+    <time class="ticket-card__date" [attr.datetime]="ticket().created_at">{{ ticket().created_at | date: 'dd.MM.yyyy' }}</time>
+  </button>
+</article>

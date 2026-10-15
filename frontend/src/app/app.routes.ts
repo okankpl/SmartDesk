@@ -5,14 +5,12 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/auth/auth-guard';
 import { MainLayout } from './layout/main-layout/main-layout';
-import { Dashboard } from './pages/dashboard/dashboard';
-import { Login } from './pages/login/login';
-import { TicketCreate } from './pages/ticket-create/ticket-create';
 
 export const routes: Routes = [
+  { path: 'register', loadComponent: () => import('./pages/register/register').then(m => m.Register), title: 'Registrieren | SmartDesk' },
   {
     path: 'login',
-    component: Login,
+    loadComponent: () => import('./pages/login/login').then(m => m.Login),
     // "title" setzt automatisch den Browser-Tab-Titel, sobald diese Route
     // aktiv ist - kein manuelles document.title = "..." noetig.
     title: 'Anmelden | SmartDesk'
@@ -38,12 +36,12 @@ export const routes: Routes = [
       },
       {
         path: 'dashboard',
-        component: Dashboard,
+        loadComponent: () => import('./pages/dashboard/dashboard').then(m => m.Dashboard),
         title: 'Dashboard | SmartDesk'
       },
       {
         path: 'tickets/new',
-        component: TicketCreate,
+        loadComponent: () => import('./pages/ticket-create/ticket-create').then(m => m.TicketCreate),
         title: 'Neues Ticket | SmartDesk'
       }
     ]

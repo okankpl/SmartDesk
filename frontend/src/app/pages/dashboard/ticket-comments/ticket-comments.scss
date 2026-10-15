@@ -1,127 +1,16 @@
-/* Farben/Abstaende bewusst gleich wie im Detail-Popup (ticket-card.scss),
-   damit der Kommentarbereich optisch dazugehoert. Styles von TicketCard
-   wirken hier NICHT automatisch: Angular kapselt Component-Styles standard-
-   maessig pro Komponente ("View Encapsulation"), eine .error-Klasse aus
-   ticket-card.scss erreicht also die Elemente dieser Komponente nicht -
-   deshalb eigene __error/__submit-Klassen. */
-.ticket-comments {
-  display: grid;
-  gap: 0.75rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid #d9e1ea;
-}
-
-.ticket-comments h3 {
-  margin: 0;
-  color: #17324d;
-  font-size: 1rem;
-}
-
-.ticket-comments__hint {
-  margin: 0;
-  color: #587089;
-  font-size: 0.875rem;
-}
-
-.ticket-comments__error {
-  margin: 0;
-  padding: 0.625rem 0.75rem;
-  border-radius: 0.375rem;
-  background: #fbe7e7;
-  color: #a13636;
-  font-size: 0.875rem;
-}
-
-/* list-style: none blendet die Nummern der <ol> aus - die Reihenfolge bleibt
-   semantisch erhalten, nur optisch wird nicht nummeriert. max-height +
-   overflow-y: auto: bei vielen Kommentaren scrollt nur die Liste, das
-   Eingabefeld darunter bleibt sichtbar. */
-.ticket-comments__list {
-  display: grid;
-  gap: 0.5rem;
-  max-height: 16rem;
-  margin: 0;
-  padding: 0;
-  overflow-y: auto;
-  list-style: none;
-}
-
-.ticket-comments__item {
-  padding: 0.625rem 0.75rem;
-  border-radius: 0.375rem;
-  background: #f4f7fa;
-}
-
-.ticket-comments__item--own {
-  background: #e3edf6;
-}
-
-.ticket-comments__meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  color: #587089;
-  font-size: 0.75rem;
-}
-
-.ticket-comments__meta strong {
-  color: #17324d;
-}
-
-/* pre-wrap: Zeilenumbrueche aus der <textarea> bleiben in der Anzeige
-   erhalten (HTML wuerde sie sonst zu einem einzigen Leerzeichen
-   zusammenfassen). overflow-wrap: sehr lange Woerter/URLs ohne Leerzeichen
-   duerfen umbrechen, statt aus dem Popup herauszuragen. */
-.ticket-comments__body {
-  margin: 0.25rem 0 0;
-  color: #17324d;
-  font-size: 0.875rem;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.ticket-comments__form {
-  display: grid;
-  gap: 0.5rem;
-}
-
-.ticket-comments__label {
-  display: grid;
-  gap: 0.375rem;
-  color: #17324d;
-  font-size: 0.875rem;
-  font-weight: 600;
-}
-
-.ticket-comments__label textarea {
-  padding: 0.5rem 0.625rem;
-  border: 1px solid #d9e1ea;
-  border-radius: 0.375rem;
-  font-weight: 400;
-  resize: vertical;
-}
-
-.ticket-comments__label textarea:focus-visible {
-  outline: 2px solid #2d5d7b;
-  outline-offset: -1px;
-}
-
-.ticket-comments__submit {
-  justify-self: end;
-  padding: 0.5rem 0.875rem;
-  border: 1px solid #2d5d7b;
-  border-radius: 0.375rem;
-  background: #ffffff;
-  color: #2d5d7b;
-  font-size: 0.875rem;
-  font-weight: 600;
-}
-
-.ticket-comments__submit:hover {
-  background: #eef4f8;
-}
-
-.ticket-comments__submit:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
+.ticket-comments { display: grid; gap: .9rem; padding-top: 1.2rem; border-top: 1px solid var(--border); }
+.ticket-comments h3 { margin: 0; font-size: 14px; color: var(--text); }
+.ticket-comments__hint { margin: 0; font-size: 12px; color: var(--muted); }
+.ticket-comments__error { margin: 0; padding: .7rem; border: 1px solid #efd5d7; border-radius: 6px; background: #fcf2f2; color: #94303a; font-size: 12px; }
+.ticket-comments__list { display: grid; gap: .65rem; margin: 0; padding: 0; list-style: none; }
+.ticket-comments__item { padding: .85rem; border: 1px solid #e8eeea; border-radius: 6px; background: #f8faf8; }
+.ticket-comments__item--own { background: #f0f7f2; border-color: #dcebe1; }
+.ticket-comments__meta { display: flex; align-items: baseline; justify-content: space-between; gap: .3rem 1rem; flex-wrap: wrap; color: var(--muted); font-size: 11px; }
+.ticket-comments__meta strong { color: #45634f; font-size: 12px; }
+.ticket-comments__body { margin: .45rem 0 0; color: #53695a; font-size: 14px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ticket-comments__form { display: grid; gap: .6rem; }
+.ticket-comments__label { display: grid; gap: .5rem; color: var(--text); font-size: 13px; font-weight: 600; }
+.ticket-comments__label textarea { width: 100%; min-height: 85px; padding: .75rem; border: 1px solid #cdd9d1; border-radius: 6px; color: var(--text); background: white; font-size: 14px; font-weight: 400; resize: vertical; }
+.ticket-comments__form-footer { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+.comment-length { color: var(--muted); font-size: 11px; }
+.ticket-comments__submit { font-size: 13px; min-height: 40px; }

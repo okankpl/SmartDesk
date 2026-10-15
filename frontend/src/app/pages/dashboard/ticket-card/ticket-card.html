@@ -1,117 +1,64 @@
-<article class="ticket-card">
-  <!-- Ganze Karte als Button: klickbar, per Tastatur fokussierbar/aktivierbar
-       (Enter/Leertaste) ohne eigene Tastatur-Logik - anders als bei einem
-       <div (click)="..."> mit nachgebauten ARIA-Attributen. -->
-  <button type="button" class="ticket-card__trigger" (click)="openDetails()">
-    <div class="ticket-card__header">
-      <h3>{{ ticket().title }}</h3>
-      <!-- Interpolation MIT Bindestrich-Klasse: "ticket-card__status--{{ ... }}"
-           haengt den aktuellen Status als Teil des Klassennamens an, z.B.
-           "ticket-card__status--open" - die passende Farbe kommt dann rein
-           per CSS (siehe ticket-card.scss), nicht per Angular-Logik. -->
-      <span class="ticket-card__status ticket-card__status--{{ ticket().status }}">
-        {{ statusLabel() }}
-      </span>
+<app-ticket-preview [ticket]="ticket()" [compact]="compact()" [highlighted]="highlighted()" (openTicket)="openDetails()" />
+
+<dialog #detailDialog class="ticket-detail" [attr.aria-labelledby]="'ticket-title-' + ticket().id" (click)="onBackdropClick($event)" (cancel)="onDialogCancel($event)" (close)="onDialogClosed()">
+  <header class="ticket-detail__header">
+    <div class="detail-heading"><span class="detail-number">SD-{{ detailTicket().id.toString().padStart(4, '0') }}</span><h2 [id]="'ticket-title-' + ticket().id">{{ detailTicket().title }}</h2></div>
+    <div class="detail-header-actions">
+      @if (canEdit() && !isEditing()) { <button #editButton type="button" class="icon-button" (click)="beginEditing()" [disabled]="isBusy()" aria-label="Ticket bearbeiten" title="Ticket bearbeiten"><svg lucidePencil [size]="18"></svg></button> }
+      <button type="button" class="ticket-detail__close icon-button" (click)="closeDetails()" [disabled]="isBusy()" aria-label="Schließen" title="Schließen"><svg lucideX [size]="20"></svg></button>
+    </div>
+  </header>
+
+  <div #detailBody class="ticket-detail__body">
+    @if (successMessage()) { <p class="detail-notice notice" role="status"><svg lucideCircleCheck [size]="18"></svg>{{ successMessage() }}</p> }
+    @if (statusChangeError()) { <p class="detail-notice notice notice--error" role="alert">{{ statusChangeError() }}</p> }
+
+    <div class="ticket-detail__main">
+      @if (isEditing()) {
+        <app-ticket-editor [ticket]="detailTicket()" (saved)="onContentSaved($event)" (reloaded)="onContentReloaded($event)" />
+      } @else {
+        <section class="description-section" aria-label="Beschreibung"><h3>Beschreibung</h3><p class="ticket-detail__description">{{ detailTicket().description || 'Keine Beschreibung vorhanden.' }}</p></section>
+      }
+      @if (isDetailOpen()) {
+        <app-ticket-comments [ticketId]="ticket().id" />
+        <app-ticket-history [ticketId]="ticket().id" [revision]="historyRevision()" />
+      }
     </div>
 
-    <span class="ticket-card__priority ticket-card__priority--{{ ticket().priority }}">
-      {{ priorityLabel() }}
-    </span>
-  </button>
-</article>
-
-<!-- #detailDialog ist eine "Template-Referenzvariable" - markiert dieses
-     Element, damit ticket-card.ts per viewChild('detailDialog') darauf
-     zugreifen kann. <dialog> ist ein natives HTML-Element (kein
-     Angular-Erfindung); ohne showModal()/open-Attribut ist es unsichtbar,
-     auch wenn es im DOM steht - deshalb erscheint dieses Popup nicht einfach
-     automatisch beim Laden der Seite.
-     (close) hoert auf das native "close"-Event des <dialog>, das bei JEDER
-     Art des Schliessens feuert, auch per Escape-Taste (siehe onDialogClosed()
-     in ticket-card.ts). -->
-<dialog #detailDialog class="ticket-detail" (click)="onBackdropClick($event)" (close)="onDialogClosed()">
-  <div class="ticket-detail__content">
-    <header class="ticket-detail__header">
-      <h2>{{ ticket().title }}</h2>
-      <button type="button" class="ticket-detail__close" (click)="closeDetails()" aria-label="Schließen">
-        ✕
-      </button>
-    </header>
-
-    <div class="ticket-detail__badges">
-      <span class="ticket-card__status ticket-card__status--{{ ticket().status }}">
-        {{ statusLabel() }}
-      </span>
-      <span class="ticket-card__priority ticket-card__priority--{{ ticket().priority }}">
-        {{ priorityLabel() }}
-      </span>
-    </div>
-
-    <!-- "||" (logisches Oder) als einfacher Fallback: ist description ein
-         leerer/falsy Wert (bei uns: null), wird stattdessen der rechte String
-         angezeigt. Reicht hier, weil ein Ticket-Titel selbst nie leer sein
-         kann (im Formular "required") - description ist das einzige Feld, das
-         wirklich fehlen darf. -->
-    <p class="ticket-detail__description">
-      {{ ticket().description || 'Keine Beschreibung vorhanden.' }}
-    </p>
-
-    <!-- <dl>/<dt>/<dd> ist die semantisch passende HTML-Struktur für
-         Beschriftung-Wert-Paare ("Description List") - <dt> = Begriff (z.B.
-         "Erstellt"), <dd> = zugehöriger Wert. -->
-    <dl class="ticket-detail__meta">
-      <dt>Erstellt</dt>
-      <!-- "| date: 'medium'" ist Angulars date-Pipe: formatiert den rohen
-           ISO-Datumsstring lesbar, 'medium' ist ein vordefiniertes Format
-           (Datum + Uhrzeit). Die tatsaechliche Sprache des Ergebnisses (z.B.
-           deutsche statt englische Monatsnamen) haengt von der
-           LOCALE_ID-Konfiguration in app.config.ts ab, nicht vom Pipe selbst. -->
-      <dd>{{ ticket().created_at | date: 'medium' }}</dd>
-      <!-- @if pro Zeile: resolved_at/closed_at sind optional (null, solange
-           das Ticket den jeweiligen Status noch nicht erreicht hat) - die
-           Zeile taucht im Popup nur auf, wenn es einen echten Wert gibt. -->
-      @if (ticket().resolved_at) {
-        <dt>Gelöst</dt>
-        <dd>{{ ticket().resolved_at | date: 'medium' }}</dd>
-      }
-      @if (ticket().closed_at) {
-        <dt>Geschlossen</dt>
-        <dd>{{ ticket().closed_at | date: 'medium' }}</dd>
-      }
-    </dl>
-
-    @if (statusChangeError()) {
-      <p class="error" role="alert">{{ statusChangeError() }}</p>
-    }
-
-    <!-- Nur sichtbar, wenn availableActions() ueberhaupt Eintraege hat -
-         @if statt eines leeren <div>, damit bei null verfuegbaren Aktionen
-         (z.B. ein Employee bei einem fremden/nicht eigenen Ticket) auch kein
-         leerer Rahmen im Popup uebrig bleibt. -->
-    @if (availableActions().length > 0) {
-      <div class="ticket-detail__actions">
-        @for (action of availableActions(); track action.targetStatus) {
-          <button
-            type="button"
-            class="ticket-detail__action"
-            [disabled]="isChangingStatus()"
-            (click)="changeStatus(action.targetStatus)">
-            {{ action.label }}
-          </button>
-        }
+    <aside class="ticket-detail__sidebar" aria-label="Ticketinformationen">
+      <h3>Ticketinformationen</h3>
+      <div class="ticket-detail__badges">
+        <span class="ticket-card__status status-badge status-badge--{{ detailTicket().status }}">{{ statusLabel() }}</span>
+        <span class="ticket-card__priority priority-badge priority-badge--{{ detailTicket().priority }}">{{ priorityLabel() }}</span>
       </div>
-    }
-
-    <!-- Kommentarbereich als eigene Komponente (siehe ticket-comments.ts).
-         @if sorgt dafuer, dass sie NUR existiert, solange das Popup offen ist:
-         beim Oeffnen erzeugt Angular sie (-> sie laedt die Kommentare), beim
-         Schliessen zerstoert Angular sie wieder (-> ihr Zustand ist weg, beim
-         naechsten Oeffnen wird frisch geladen). Ohne das @if stuende sie fuer
-         JEDE Karte im Dashboard dauerhaft im DOM und jede wuerde sofort ihre
-         Kommentare laden, auch bei nie geoeffnetem Popup.
-         [ticketId]="ticket().id" reicht nur die ID als Input hinein. -->
-    @if (isDetailOpen()) {
-      <app-ticket-comments [ticketId]="ticket().id" />
-    }
+      <dl class="ticket-detail__meta">
+        <dt>Gemeldet von</dt><dd>{{ detailTicket().requester_name || 'Nutzer #' + detailTicket().requester_id }}</dd>
+        <dt>Bearbeiter</dt><dd>{{ detailTicket().assignee_name || 'Nicht zugewiesen' }}</dd>
+        <dt>Erstellt</dt><dd>{{ detailTicket().created_at | date: 'dd.MM.yyyy, HH:mm' }}</dd>
+        @if (detailTicket().resolved_at) { <dt>Gelöst</dt><dd>{{ detailTicket().resolved_at | date: 'dd.MM.yyyy, HH:mm' }}</dd> }
+        @if (detailTicket().closed_at) { <dt>Geschlossen</dt><dd>{{ detailTicket().closed_at | date: 'dd.MM.yyyy, HH:mm' }}</dd> }
+      </dl>
+      @if (isDetailOpen() && currentUser()?.role === 'admin' && detailTicket().status !== 'closed') {
+        <div class="assignment-section"><app-ticket-assignment [ticket]="detailTicket()" [disabled]="isEditing() || isChangingStatus()" [(busy)]="isAssigning" (saved)="onAssignmentSaved($event)" /></div>
+      }
+    </aside>
   </div>
+
+  <footer class="ticket-detail__footer">
+    @if (confirmDiscard()) {
+      <div class="discard-confirm" role="alert"><strong>Ungespeicherte Änderungen verwerfen?</strong><div class="discard-actions"><button type="button" class="button" (click)="continueEditing()">Weiter bearbeiten</button><button type="button" class="button discard-button" (click)="discardEditing()">Änderungen verwerfen</button></div></div>
+    } @else if (isEditing()) {
+      <button type="button" class="button button--quiet" [disabled]="isBusy()" (click)="cancelEditing()">Abbrechen</button>
+      <button type="submit" class="button button--primary" [attr.form]="editor()?.formId()" [disabled]="isBusy() || !editor()?.dirty() || editor()?.conflict()"><svg lucideSave [size]="16"></svg>{{ editor()?.saving() ? 'Wird gespeichert…' : 'Speichern' }}</button>
+    } @else {
+    <button type="button" class="button button--quiet" [disabled]="isBusy()" (click)="closeDetails()">Zurück zur Übersicht</button>
+    <div class="ticket-detail__actions" [attr.aria-busy]="isBusy()">
+      @for (action of availableActions(); track action.targetStatus) {
+        <button type="button" class="ticket-detail__action button" [class.button--primary]="action.targetStatus !== 'in_progress' || detailTicket().status === 'open'" [disabled]="isBusy()" (click)="changeStatus(action.targetStatus)">
+          <svg [lucideIcon]="action.icon" [size]="16"></svg>{{ action.label }}
+        </button>
+      }
+    </div>
+    }
+  </footer>
 </dialog>

@@ -75,3 +75,7 @@ def test_decode_rejects_unsigned_token():
 
     with pytest.raises(jwt.PyJWTError):
         decode_access_token(unsigned_token)
+
+
+def test_legacy_placeholder_hash_cannot_crash_login():
+    assert verify_password("anything", "not-a-real-hash") is False

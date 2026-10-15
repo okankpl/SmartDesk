@@ -60,7 +60,11 @@ def get_current_user(
     if user_id is None:
         raise unauthorized
 
-    user = db.get(User, int(user_id))
+    try:
+        parsed_user_id = int(user_id)
+    except (ValueError, TypeError):
+        raise unauthorized
+    user = db.get(User, parsed_user_id)
     if user is None:
         raise unauthorized
 

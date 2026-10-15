@@ -1,89 +1,20 @@
-/* Ganzseitige, zentrierte Login-Karte - bewusst ohne app-shell/Sidebar,
-   weil die Route ausserhalb von MainLayout liegt (siehe app.routes.ts) */
-.login-page {
-  display: grid;
-  place-items: center;
-  min-height: 100vh;
-  background: #f5f7fb;
-  padding: 1.5rem;
-}
-
-.login-card {
-  display: grid;
-  gap: 1rem;
-  width: 100%;
-  max-width: 22rem;
-  padding: 2rem;
-  border: 1px solid #d9e1ea;
-  border-radius: 0.75rem;
-  background: #ffffff;
-}
-
-.brand {
-  margin: 0;
-  color: #17324d;
-  font-weight: 700;
-  font-size: 1.125rem;
-}
-
-h1 {
-  margin: 0 0 0.5rem;
-  color: #17324d;
-  font-size: 1.5rem;
-}
-
-.field {
-  display: grid;
-  gap: 0.375rem;
-  color: #587089;
-  font-size: 0.875rem;
-  font-weight: 600;
-}
-
-.field input {
-  padding: 0.625rem 0.75rem;
-  border: 1px solid #d9e1ea;
-  border-radius: 0.375rem;
-  font: inherit;
-  color: #17324d;
-}
-
-.field input:focus {
-  outline: 2px solid #2d5d7b;
-  outline-offset: 1px;
-}
-
-.error {
-  margin: 0;
-  padding: 0.625rem 0.75rem;
-  border-radius: 0.375rem;
-  background: #fbe7e7;
-  color: #a13636;
-  font-size: 0.875rem;
-}
-
-// Gleiche Form wie .error, aber neutrale Farben: ein Hinweis, kein Fehler.
-.info {
-  margin: 0;
-  padding: 0.625rem 0.75rem;
-  border-radius: 0.375rem;
-  background: #e8f0fb;
-  color: #2a4f86;
-  font-size: 0.875rem;
-}
-
-button {
-  padding: 0.75rem 1rem;
-  border: none;
-  border-radius: 0.375rem;
-  background: #17324d;
-  color: #ffffff;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
+.login-page { display: grid; place-items: center; min-height: 100dvh; padding: 2rem 1rem; background: #f3f6f3; }
+.auth-shell { display: grid; gap: 1.75rem; width: min(100%, 400px); }
+.brand { display: inline-flex; align-items: center; justify-content: center; gap: .7rem; color: var(--text); text-decoration: none; font-size: 24px; font-weight: 800; }
+.brand-mark { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 8px; background: var(--accent); color: white; }
+.login-card { display: grid; gap: 1.25rem; padding: 2rem; border: 1px solid var(--border); border-radius: 8px; background: white; box-shadow: 0 4px 20px #1e392806; }
+h1 { margin: 0 0 .25rem; font-size: 23px; font-weight: 800; }
+.password-field { position: relative; }
+.password-field input { padding-right: 2.75rem; }
+.password-toggle { position: absolute; top: 5px; right: 5px; display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); }
+.password-toggle:hover { color: var(--accent); background: var(--accent-soft); }
+.auth-submit { min-height: 44px; justify-content: space-between; }
+.auth-link { margin: 0; padding-top: .4rem; color: var(--muted); text-align: center; font-size: 12px; }
+.auth-link a { color: var(--accent); font-weight: 700; text-decoration: none; }
+.auth-link a:hover { text-decoration: underline; }
+.error, .info { margin: 0; padding: .75rem; border: 1px solid #efd5d7; border-radius: 6px; background: #fcf2f2; color: #94303a; font-size: 12px; line-height: 1.7; }
+.info { background: #eef6f0; border-color: #cce3d6; color: #21593e; }
+.password-hint { margin-top: -.65rem; color: var(--muted); font-size: 11px; }
+.show-password { display: flex; align-items: center; gap: .5rem; font-size: 12px; color: var(--muted); }
+.show-password input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+@media (max-width: 28rem) { .login-card { padding: 1.5rem; } }

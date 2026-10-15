@@ -16,7 +16,7 @@ def make_user(role: UserRole, user_id: int = 1) -> User:
 
 
 def make_ticket(status: TicketStatus, requester_id: int = 1) -> Ticket:
-    return Ticket(id=1, title="Test-Ticket", status=status, requester_id=requester_id)
+    return Ticket(id=1, title="Test-Ticket", status=status, requester_id=requester_id, assignee_id=1 if status != TicketStatus.OPEN else None)
 
 
 def test_agent_can_claim_open_ticket():
@@ -83,6 +83,7 @@ def test_rejecting_a_solution_clears_resolved_at():
     requester = make_user(UserRole.EMPLOYEE, user_id=7)
     ticket = make_ticket(TicketStatus.IN_PROGRESS, requester_id=7)
     agent = make_user(UserRole.AGENT, user_id=2)
+    ticket.assignee_id = agent.id
     apply_status_transition(ticket, TicketStatus.RESOLVED, agent)
 
     apply_status_transition(ticket, TicketStatus.IN_PROGRESS, requester)
@@ -167,3 +168,38 @@ def test_closed_ticket_has_no_options_for_anyone():
     admin = make_user(UserRole.ADMIN)
 
     assert get_allowed_next_statuses(ticket, admin) == []
+
+
+def test_claim_assigns_the_current_agent():
+    ticket = make_ticket(TicketStatus.OPEN)
+    apply_status_transition(ticket, TicketStatus.IN_PROGRESS, make_user(UserRole.AGENT, 42))
+    assert ticket.assignee_id == 42
+
+
+@pytest.mark.parametrize("assignee_id", [None, 99])
+def test_agent_cannot_resolve_an_unassigned_or_foreign_ticket(assignee_id):
+    ticket = make_ticket(TicketStatus.IN_PROGRESS)
+    ticket.assignee_id = assignee_id
+    agent = make_user(UserRole.AGENT, 42)
+    assert get_allowed_next_statuses(ticket, agent) == []
+    with pytest.raises(PermissionDeniedError):
+        apply_status_transition(ticket, TicketStatus.RESOLVED, agent)
+    assert ticket.status == TicketStatus.IN_PROGRESS
+    assert ticket.resolved_at is None
+
+
+def test_agent_cannot_steal_a_preassigned_open_ticket():
+    ticket = make_ticket(TicketStatus.OPEN)
+    ticket.assignee_id = 99
+    agent = make_user(UserRole.AGENT, 42)
+    assert get_allowed_next_statuses(ticket, agent) == []
+    with pytest.raises(PermissionDeniedError):
+        apply_status_transition(ticket, TicketStatus.IN_PROGRESS, agent)
+    assert ticket.assignee_id == 99
+
+
+def test_admin_can_override_a_preassigned_claim():
+    ticket = make_ticket(TicketStatus.OPEN)
+    ticket.assignee_id = 99
+    apply_status_transition(ticket, TicketStatus.IN_PROGRESS, make_user(UserRole.ADMIN, 42))
+    assert ticket.assignee_id == 42

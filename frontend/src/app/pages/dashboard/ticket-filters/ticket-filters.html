@@ -1,0 +1,19 @@
+<div class="queue-toolbar">
+  <div class="search-field">
+    <label class="sr-only" for="ticket-search">Tickets durchsuchen</label>
+    <svg lucideSearch [size]="17" class="search-icon"></svg>
+    <input id="ticket-search" type="search" placeholder="Tickets durchsuchen…" [ngModel]="search()" (ngModelChange)="search.set($event)" />
+    <button type="button" class="clear-search" title="Suche löschen" aria-label="Suche löschen" [disabled]="!search()" (click)="search.set('')"><svg lucideX [size]="15"></svg></button>
+  </div>
+  <div class="queue-field"><label class="sr-only" for="queue-priority">Priorität</label><select id="queue-priority" [ngModel]="priority()" (ngModelChange)="priority.set($event)">
+    <option value="">Alle Prioritäten</option><option value="critical">Kritisch</option><option value="high">Hoch</option><option value="medium">Mittel</option><option value="low">Niedrig</option>
+  </select></div>
+  @if (support()) {
+    <div class="queue-field"><label class="sr-only" for="queue-assignment">Zuweisung</label><select id="queue-assignment" [ngModel]="assignment()" (ngModelChange)="assignment.set($event)">
+      <option value="all">Alle Bearbeiter</option><option value="mine">Mir zugewiesen</option><option value="unassigned">Nicht zugewiesen</option>
+    </select></div>
+  }
+  <div class="queue-field sort-field"><label class="sr-only" for="queue-sort">Sortierung</label><select id="queue-sort" [ngModel]="sort()" (ngModelChange)="sort.set($event)">
+    <option value="priority">Priorität zuerst</option><option value="oldest">Älteste zuerst</option><option value="newest">Neueste zuerst</option>
+  </select></div>
+</div>

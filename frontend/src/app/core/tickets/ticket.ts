@@ -21,6 +21,7 @@ export type TicketPriority = 'low' | 'medium' | 'high' | 'critical';
 // ist reine Behauptung/Annahme) - siehe die Lektion dazu in der Architektur-Doku.
 export interface Ticket {
   id: number;
+  version: number;
   title: string;
   // "string | null": das Feld ist entweder ein String ODER genau der Wert
   // null - TypeScript zwingt einen dadurch, an jeder Stelle, die description
@@ -31,6 +32,8 @@ export interface Ticket {
   priority: TicketPriority;
   requester_id: number;
   assignee_id: number | null;
+  requester_name?: string | null;
+  assignee_name?: string | null;
   // ISO-8601-Strings, keine Date-Objekte - HttpClient parst JSON-Strings nicht
   // automatisch zu Date, das muesste man bei Bedarf selbst tun (new Date(...)).
   created_at: string;

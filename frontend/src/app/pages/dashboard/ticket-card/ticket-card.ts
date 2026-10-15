@@ -8,37 +8,22 @@
 // ein Signal-basiertes Event, das die Elternkomponente (Dashboard) per
 // (statusChanged)="..." abonnieren kann - das Angular-Gegenstueck zum
 // aelteren @Output() EventEmitter, nur ohne Decorator/Klasse.
-import { Component, ElementRef, computed, inject, input, output, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, Injector, afterNextRender, computed, inject, input, output, signal, viewChild } from '@angular/core';
 // DatePipe ist die Klasse hinter dem "| date"-Pipe-Syntax im Template
 // (siehe ticket-card.html) - Pipes muessen wie Komponenten/Direktiven im
 // "imports"-Array der Standalone-Komponente aufgefuehrt werden.
 import { DatePipe } from '@angular/common';
+import { LucideX, LucideCheck, LucideLockKeyhole, LucideRotateCcw, LucidePlay, LucideDynamicIcon, LucideCircleCheck, LucidePencil, LucideSave } from '@lucide/angular';
 import { errorMessageFor } from '../../../core/http-error-message';
 import { TicketsService } from '../../../core/tickets/tickets';
-import { Ticket, TicketPriority, TicketStatus } from '../../../core/tickets/ticket';
+import { Ticket, TicketStatus } from '../../../core/tickets/ticket';
 import { TicketComments } from '../ticket-comments/ticket-comments';
-
-// Record<TicketStatus, string> ist ein TypeScript-Utility-Type: "ein Objekt,
-// das fuer JEDEN moeglichen TicketStatus-Wert einen String-Eintrag hat, nicht
-// mehr und nicht weniger". Vergisst man hier einen der vier Status, meldet
-// der Compiler sofort einen Fehler - eine simple Record<string, string>
-// wuerde das nicht garantieren.
-//
-// Deutsche Beschriftung für jeden Ticket-Status im Status-Badge.
-const STATUS_LABELS: Record<TicketStatus, string> = {
-  open: 'Offen',
-  in_progress: 'In Bearbeitung',
-  resolved: 'Gelöst',
-  closed: 'Geschlossen',
-};
-
-// Deutsche Beschriftung für jede Priorität im Prioritäts-Badge.
-const PRIORITY_LABELS: Record<TicketPriority, string> = {
-  low: 'Niedrig',
-  medium: 'Mittel',
-  high: 'Hoch',
-  critical: 'Kritisch',
-};
+import { TicketHistory } from '../ticket-history/ticket-history';
+import { TicketAssignment } from '../ticket-assignment/ticket-assignment';
+import { Auth } from '../../../core/auth/auth';
+import { STATUS_LABELS, PRIORITY_LABELS } from '../../../core/tickets/ticket-labels';
+import { TicketPreview } from '../ticket-preview/ticket-preview';
+import { TicketEditor } from '../ticket-editor/ticket-editor';
 
 // Beschriftung fuer die Aktions-Buttons im Detail-Popup - verschachtelt nach
 // AKTUELLEM Status, weil derselbe Ziel-Status je nach Ausgangslage eine andere
@@ -56,12 +41,14 @@ const TRANSITION_ACTION_LABELS: Record<TicketStatus, Partial<Record<TicketStatus
 
 @Component({
   selector: 'app-ticket-card',
-  imports: [DatePipe, TicketComments],
+  imports: [DatePipe, TicketComments, TicketHistory, TicketAssignment, TicketPreview, TicketEditor, LucideX, LucideDynamicIcon, LucideCircleCheck, LucidePencil, LucideSave],
   templateUrl: './ticket-card.html',
   styleUrl: './ticket-card.scss'
 })
 export class TicketCard {
   private readonly ticketsService = inject(TicketsService);
+  private readonly injector = inject(Injector);
+  protected readonly currentUser = inject(Auth).currentUser;
 
   // input.required<Ticket>() erklaert eine PFLICHT-Eingabe: die Elternkomponente
   // (Dashboard, per [ticket]="ticket" in dashboard.html) MUSS ein Ticket
@@ -70,31 +57,42 @@ export class TicketCard {
   // Angular-Versionen selbst Signals, aendert sich der uebergebene Wert,
   // reagieren alle computed()s unten automatisch darauf.
   readonly ticket = input.required<Ticket>();
+  readonly compact = input(false);
+  readonly highlighted = input(false);
+  private readonly updatedTicket = signal<Ticket | null>(null);
+  protected readonly detailTicket = computed(() => this.updatedTicket() ?? this.ticket());
+  protected readonly historyRevision = signal(0);
+  protected readonly successMessage = signal<string | null>(null);
+  protected readonly isEditing = signal(false);
+  protected readonly isAssigning = signal(false);
+  protected readonly confirmDiscard = signal(false);
+  private closeAfterDiscard = false;
+  protected readonly editor = viewChild(TicketEditor);
+  private readonly editButton = viewChild<ElementRef<HTMLButtonElement>>('editButton');
+  protected readonly canEdit = computed(() => ['agent', 'admin'].includes(this.currentUser()?.role ?? '') && this.detailTicket().status !== 'closed');
+  protected readonly isBusy = computed(() => this.isChangingStatus() || this.isAssigning() || !!this.editor()?.busy());
+  private hasChanges = false;
 
-  // Feuert, nachdem ein Statuswechsel erfolgreich war - Dashboard reagiert
-  // darauf, indem es die Ticketliste neu laedt (siehe dashboard.html). Diese
-  // Komponente kennt die Gesamtliste gar nicht, deshalb kann/soll sie sie
-  // nicht selbst neu laden - sie meldet nur "bei mir hat sich was getan"
-  // nach oben (unidirektionaler Datenfluss: Daten fliessen von Dashboard
-  // runter zu TicketCard per Input, Ereignisse fliessen per Output wieder hoch).
+  // Confirmed changes refresh the parent queue after the dialog closes.
   readonly statusChanged = output<void>();
 
   // Beschriftung für das Status-Badge, abgeleitet aus dem aktuellen Ticket-Status.
-  protected readonly statusLabel = computed(() => STATUS_LABELS[this.ticket().status]);
+  protected readonly statusLabel = computed(() => STATUS_LABELS[this.detailTicket().status]);
 
   // Beschriftung für das Prioritäts-Badge, abgeleitet aus der aktuellen Priorität.
-  protected readonly priorityLabel = computed(() => PRIORITY_LABELS[this.ticket().priority]);
+  protected readonly priorityLabel = computed(() => PRIORITY_LABELS[this.detailTicket().priority]);
 
   // Baut aus ticket().allowed_transitions (vom Backend berechnet, siehe
   // ticket.ts) die anzuzeigenden Buttons: pro erlaubtem Ziel-Status ein
   // {status, label}-Paar. Zeigt NIE einen Button fuer einen Uebergang, den
   // der aktuelle Nutzer laut Backend gerade nicht ausloesen duerfte.
   protected readonly availableActions = computed(() => {
-    const currentTicket = this.ticket();
+    const currentTicket = this.detailTicket();
     const labelsForCurrentStatus = TRANSITION_ACTION_LABELS[currentTicket.status];
     return currentTicket.allowed_transitions.map((targetStatus) => ({
       targetStatus,
       label: labelsForCurrentStatus[targetStatus] ?? STATUS_LABELS[targetStatus],
+      icon: targetStatus === 'closed' ? LucideLockKeyhole : targetStatus === 'resolved' ? LucideCheck : currentTicket.status === 'resolved' ? LucideRotateCcw : LucidePlay,
     }));
   });
 
@@ -112,6 +110,7 @@ export class TicketCard {
   // zurueck statt eines "Element-oder-undefined"-Typs, den man jedes Mal
   // pruefen muesste.
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('detailDialog');
+  private readonly detailBody = viewChild<ElementRef<HTMLDivElement>>('detailBody');
 
   // Ist das Detail-Popup gerade offen? Steuert im Template per @if, ob der
   // Kommentarbereich (<app-ticket-comments>) ueberhaupt existiert.
@@ -128,20 +127,100 @@ export class TicketCard {
   // Angular-spezifisches API) - macht es sichtbar UND modal (Rest der Seite
   // per Tab-Taste nicht mehr erreichbar, ::backdrop erscheint automatisch).
   protected openDetails(): void {
+    this.updatedTicket.set(null);
+    this.successMessage.set(null);
+    this.hasChanges = false;
     this.statusChangeError.set(null);
+    this.isEditing.set(false);
+    this.confirmDiscard.set(false);
     this.isDetailOpen.set(true);
     this.dialog().nativeElement.showModal();
+    if (this.detailBody()) this.detailBody()!.nativeElement.scrollTop = 0;
   }
 
   // close() ist das Gegenstueck zu showModal() - blendet den Dialog wieder
   // aus und gibt die Bedienung des Rests der Seite frei.
   protected closeDetails(): void {
+    if (this.isBusy()) return;
+    if (this.isEditing() && this.editor()?.dirty()) {
+      this.closeAfterDiscard = true;
+      this.confirmDiscard.set(true);
+      return;
+    }
     this.dialog().nativeElement.close();
+  }
+
+  protected beginEditing(): void {
+    if (!this.canEdit() || this.isBusy()) return;
+    this.successMessage.set(null);
+    this.statusChangeError.set(null);
+    this.confirmDiscard.set(false);
+    this.isEditing.set(true);
+    if (this.detailBody()) this.detailBody()!.nativeElement.scrollTop = 0;
+  }
+
+  protected cancelEditing(): void {
+    if (this.isBusy()) return;
+    if (this.editor()?.dirty()) {
+      this.closeAfterDiscard = false;
+      this.confirmDiscard.set(true);
+    } else {
+      this.finishEditing();
+    }
+  }
+
+  protected discardEditing(): void {
+    if (this.isBusy()) return;
+    this.finishEditing(!this.closeAfterDiscard);
+    if (this.closeAfterDiscard) this.dialog().nativeElement.close();
+  }
+
+  protected continueEditing(): void {
+    this.confirmDiscard.set(false);
+    afterNextRender(() => this.dialog().nativeElement.querySelector<HTMLInputElement>('app-ticket-editor input')?.focus(), { injector: this.injector });
+  }
+
+  private finishEditing(restoreFocus = true): void {
+    this.isEditing.set(false);
+    this.confirmDiscard.set(false);
+    if (restoreFocus) afterNextRender(() => this.editButton()?.nativeElement.focus(), { injector: this.injector });
+  }
+
+  protected onContentSaved(ticket: Ticket): void {
+    this.acceptUpdate(ticket, 'Ticketänderungen wurden gespeichert.');
+    this.finishEditing();
+  }
+
+  protected onContentReloaded(ticket: Ticket): void {
+    this.acceptUpdate(ticket, ticket.status === 'closed' ? 'Der aktuelle Stand wurde geladen. Das Ticket ist geschlossen.' : 'Der aktuelle Stand wurde geladen.');
+    if (ticket.status === 'closed') this.finishEditing();
+  }
+
+  protected onAssignmentSaved(ticket: Ticket): void {
+    this.acceptUpdate(ticket, 'Bearbeiter wurde aktualisiert.');
+  }
+
+  private acceptUpdate(ticket: Ticket, message: string): void {
+    this.updatedTicket.set(ticket);
+    this.successMessage.set(message);
+    this.historyRevision.update(value => value + 1);
+    this.hasChanges = true;
+    if (!this.isDetailOpen()) {
+      this.hasChanges = false;
+      this.statusChanged.emit();
+    }
+  }
+
+  protected onDialogCancel(event: Event): void {
+    if (this.isBusy() || this.isEditing()) {
+      event.preventDefault();
+      this.closeDetails();
+    }
   }
 
   // Wird ueber (close)="onDialogClosed()" im Template aufgerufen. Das native
   // "close"-Event feuert bei JEDER Art des Schliessens - ueber closeDetails()
-  // (X-Button, Klick daneben, nach Statuswechsel) UND ueber die Escape-Taste,
+  // (X-Button oder Klick daneben) UND ueber die Escape-Taste,
   // die der Browser selbst behandelt, ohne dass unser Code davon etwas
   // mitbekaeme. Deshalb wird isDetailOpen HIER zurueckgesetzt und nicht in
   // closeDetails() - sonst wuerde "mit Escape geschlossen" als "noch offen"
@@ -149,6 +228,13 @@ export class TicketCard {
   // nicht frisch laden.
   protected onDialogClosed(): void {
     this.isDetailOpen.set(false);
+    this.isEditing.set(false);
+    this.confirmDiscard.set(false);
+    // Refresh after closing, so a moved ticket cannot destroy its open dialog.
+    if (this.hasChanges) {
+      this.hasChanges = false;
+      this.statusChanged.emit();
+    }
   }
 
   // showModal() macht das <dialog> zwar modal, "Klick daneben schliessen" ist
@@ -166,17 +252,14 @@ export class TicketCard {
 
   // Wird per (click) auf einen der Aktions-Buttons ausgeloest.
   protected changeStatus(targetStatus: TicketStatus): void {
+    if (this.isBusy() || this.isEditing()) return;
     this.isChangingStatus.set(true);
     this.statusChangeError.set(null);
 
     this.ticketsService.updateStatus(this.ticket().id, targetStatus).subscribe({
-      next: () => {
+      next: (ticket) => {
         this.isChangingStatus.set(false);
-        // Der Dialog zeigt sonst weiter den ALTEN Status/die alten Buttons an,
-        // bis Dashboard neu geladen hat und diese Komponente mit einem neuen
-        // ticket()-Wert neu aufgebaut wird - einfacher, ihn direkt zu schliessen.
-        this.closeDetails();
-        this.statusChanged.emit();
+        this.acceptUpdate(ticket, 'Status geändert: ' + STATUS_LABELS[ticket.status] + '.');
       },
       error: (error: unknown) => {
         // 409, wenn zwischenzeitlich schon jemand anders den Status

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, StringConstraints, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 from app.models.ticket import TicketPriority, TicketStatus
 
@@ -59,6 +59,7 @@ class TicketUpdate(BaseModel):
     was tatsaechlich mitgeschickt wurde.
     """
 
+    expected_version: Annotated[int, Field(strict=True, ge=1)] | None = None
     title: TicketTitle | None = None
     description: TicketDescription | None = None
     priority: TicketPriority | None = None
@@ -72,7 +73,7 @@ class TicketUpdate(BaseModel):
     # erlaubt das nicht, das Ergebnis war ein 500-Fehler aus der Datenbank.
     # Dieser Validator laeuft nur fuer tatsaechlich mitgeschickte Werte und
     # macht daraus einen klaren 422.
-    @field_validator("title", "priority")
+    @field_validator("title", "priority", "expected_version")
     @classmethod
     def reject_explicit_null(cls, value: object) -> object:
         if value is None:
@@ -104,12 +105,15 @@ class TicketRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    version: int
     title: str
     description: str | None
     status: TicketStatus
     priority: TicketPriority
     requester_id: int
     assignee_id: int | None
+    requester_name: str | None = None
+    assignee_name: str | None = None
     created_at: datetime
     updated_at: datetime
     resolved_at: datetime | None

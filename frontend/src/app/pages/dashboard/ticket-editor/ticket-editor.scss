@@ -1,0 +1,11 @@
+:host { display: block; min-width: 0; }
+h3 { margin: 0 0 1rem; font-size: 14px; }
+form { display: grid; gap: 1.2rem; }
+.field-heading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: .25rem .6rem; }
+.field-heading label { font-weight: 600; }
+.optional, .character-count { color: var(--muted); font-size: 12px; font-weight: 400; }
+.character-count { white-space: nowrap; }
+.priority-field { max-width: 240px; }
+.field-error { color: var(--danger); }
+.notice { margin: 0; }
+.reload-button { justify-self: start; text-align: left; }

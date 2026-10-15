@@ -11,16 +11,28 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: smartdesk_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d smartdesk_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     # Alle "run"-Schritte starten automatisch im backend/-Ordner, damit wir
     # nicht jedes Mal "cd backend &&" davorschreiben muessen.
     defaults:
       run:
         working-directory: backend
     env:
-      # Unsere Tests brauchen keine echte Datenbankverbindung (nur die
-      # Settings-Klasse verlangt, dass die Variable ueberhaupt gesetzt ist).
-      # Kein echtes Geheimnis, nur ein Platzhalter fuer den CI-Lauf.
-      DATABASE_URL: postgresql+psycopg://test:test@localhost:5432/test
+      DATABASE_URL: postgresql+psycopg://test:test@localhost:5432/smartdesk_test
+      TEST_DATABASE_URL: postgresql+psycopg://test:test@localhost:5432/smartdesk_test
       SECRET_KEY: ci-test-secret-key-not-for-production
 
     steps:
@@ -35,7 +47,15 @@ jobs:
           python-version: "3.12"
 
       - name: Abhaengigkeiten installieren
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-dev.txt
+
+      - name: Statische Pruefung
+        run: ruff check .
+
+      - name: Migrationen und Modelldrift pruefen
+        run: |
+          alembic upgrade head
+          alembic check
 
       - name: Tests ausfuehren
         run: pytest -v

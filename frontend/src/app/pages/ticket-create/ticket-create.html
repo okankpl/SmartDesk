@@ -1,52 +1,23 @@
 <section class="ticket-create" aria-labelledby="ticket-create-title">
-  <header class="page-header">
-    <p class="eyebrow">Arbeitsbereich</p>
-    <h1 id="ticket-create-title">Neues Ticket</h1>
-  </header>
-
-  <form class="ticket-form" (submit)="submit($event)">
-    <label class="field">
-      <span>Titel</span>
-      <input type="text" [value]="title()" (input)="onTitleInput($event)" required maxlength="200" />
-    </label>
-
-    <label class="field">
-      <span>Beschreibung (optional)</span>
-      <!-- Kein "required" hier - die Beschreibung ist laut Backend-Schema
-           (TicketCreate) optional, siehe auch das description-Handling in
-           ticket-create.ts (leer -> null). -->
-      <!-- maxlength="10000": dieselbe Grenze wie im Backend (TicketDescription
-           in schemas/ticket.py), analog zu maxlength="200" beim Titel. -->
-      <textarea rows="4" maxlength="10000" [value]="description()" (input)="onDescriptionInput($event)"></textarea>
-    </label>
-
-    <label class="field">
-      <span>Priorität</span>
-      <!-- (change) statt (input) beim <select>: "change" feuert erst, wenn eine
-           Auswahl abgeschlossen ist (Dropdown geschlossen), nicht bei jedem
-           Zwischenschritt - bei einem <select> gibt es ohnehin keine
-           Zwischenschritte wie bei Freitext-Eingabe. -->
-      <select [value]="priority()" (change)="onPriorityChange($event)">
-        <!-- @for durchlaeuft priorityOptions und erzeugt pro Eintrag eine
-             <option>. "track option.value" sagt Angular, woran es einzelne
-             Eintraege bei Aenderungen wiedererkennt (hier: am eindeutigen
-             value) - wichtig fuer effizientes Neu-Rendern, dieselbe Idee wie
-             "track ticket.id" im Dashboard. -->
-        @for (option of priorityOptions; track option.value) {
-          <option [value]="option.value">{{ option.label }}</option>
-        }
-      </select>
-    </label>
-
-    @if (errorMessage()) {
-      <p class="error" role="alert">{{ errorMessage() }}</p>
-    }
-
-    <div class="form-actions">
-      <a routerLink="/dashboard" class="cancel-link">Abbrechen</a>
-      <button type="submit" [disabled]="isSubmitting()">
-        {{ isSubmitting() ? 'Wird angelegt…' : 'Ticket anlegen' }}
-      </button>
+  <a routerLink="/dashboard" class="back-link"><svg lucideArrowLeft [size]="16"></svg>Zurück zum Dashboard</a>
+  <header class="page-header"><p class="eyebrow">IT-Support</p><h1 id="ticket-create-title">Neues Ticket</h1></header>
+  <form class="ticket-form" (submit)="submit($event)" [attr.aria-busy]="isSubmitting()">
+    <div class="field">
+      <div class="field-heading"><label for="new-title">Titel</label><span class="character-count">{{ title().length }} / 200</span></div>
+      <input id="new-title" name="title" type="text" placeholder="z. B. Kein Zugriff auf das Projektlaufwerk" [value]="title()" (input)="onTitleInput($event)" [attr.aria-invalid]="!!titleError()" [attr.aria-describedby]="titleError() ? 'title-error' : null" required maxlength="200" />
+      @if (titleError()) { <small id="title-error" class="field-error" role="alert">{{ titleError() }}</small> }
     </div>
+    <div class="field">
+      <div class="field-heading"><label for="new-description">Beschreibung <span class="optional">(optional)</span></label><span class="character-count">{{ description().length }} / 10.000</span></div>
+      <textarea id="new-description" name="description" rows="7" maxlength="10000" placeholder="Fehlerbild, betroffene Geräte und bisherige Lösungsversuche…" [value]="description()" (input)="onDescriptionInput($event)"></textarea>
+    </div>
+    <div class="field priority-field">
+      <label for="ticket-priority">Priorität</label>
+      <select id="ticket-priority" [value]="priority()" (change)="onPriorityChange($event)">
+        @for (option of priorityOptions; track option.value) { <option [value]="option.value">{{ option.label }}</option> }
+      </select>
+    </div>
+    @if (errorMessage()) { <p class="notice notice--error" role="alert"><svg lucideCircleAlert [size]="18"></svg>{{ errorMessage() }}</p> }
+    <div class="form-actions"><a routerLink="/dashboard" class="button button--quiet">Abbrechen</a><button type="submit" class="button button--primary" [disabled]="isSubmitting()"><svg lucidePlus [size]="17"></svg>{{ isSubmitting() ? 'Wird angelegt…' : 'Ticket anlegen' }}</button></div>
   </form>
 </section>

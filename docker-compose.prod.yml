@@ -26,7 +26,9 @@ services:
     restart: unless-stopped
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      target: runtime
     env_file:
       - .env
     depends_on:

@@ -10,6 +10,7 @@ import { Auth } from '../../../core/auth/auth';
 import { CommentsService } from '../../../core/comments/comments';
 import { TicketComment } from '../../../core/comments/comment';
 import { errorMessageFor } from '../../../core/http-error-message';
+import { LucideSend } from '@lucide/angular';
 
 // Kommentarverlauf + Eingabeformular zu EINEM Ticket. Eigene Komponente statt
 // Teil von TicketCard, weil TicketCard schon Karte, Detail-Popup und
@@ -25,7 +26,7 @@ import { errorMessageFor } from '../../../core/http-error-message';
 // anderer.
 @Component({
   selector: 'app-ticket-comments',
-  imports: [DatePipe],
+  imports: [DatePipe, LucideSend],
   templateUrl: './ticket-comments.html',
   styleUrl: './ticket-comments.scss',
 })
@@ -81,18 +82,15 @@ export class TicketComments {
     return comment.author_id === this.auth.currentUser()?.id;
   }
 
-  // Anzeigename des Autors. Das Backend liefert aktuell nur author_id, keinen
-  // Namen - fuer eigene Kommentare reicht "Du" (die eigene ID kennt das
-  // Frontend aus /auth/me), fuer alle anderen bleibt vorerst nur die Nummer.
-  // `...${...}...` (Backticks) ist ein Template-String: ${...} setzt den Wert
-  // eines Ausdrucks direkt in den Text ein.
   protected authorLabel(comment: TicketComment): string {
-    return this.isOwnComment(comment) ? 'Du' : `Nutzer #${comment.author_id}`;
+    return this.isOwnComment(comment) ? 'Du' : (comment.author_name ?? `Nutzer #${comment.author_id}`);
   }
 
   protected onBodyInput(event: Event): void {
     this.newCommentBody.set((event.target as HTMLTextAreaElement).value);
   }
+
+  protected reloadComments(): void { this.commentsResource.reload(); }
 
   // Wird per (submit) am <form> ausgeloest.
   protected submit(event: Event): void {
@@ -101,6 +99,7 @@ export class TicketComments {
     // Formular-Verhalten aus der Zeit vor Single-Page-Apps). preventDefault()
     // unterdrueckt genau dieses Standardverhalten - wie in ticket-create.ts.
     event.preventDefault();
+    if (!this.canSubmit()) return;
     this.isSubmitting.set(true);
     this.submitError.set(null);
 

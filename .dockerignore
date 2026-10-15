@@ -1,0 +1,17 @@
+.git
+.env
+.env.*
+notes
+backups
+output
+tmp
+.ruff_cache
+.vscode
+backend/.venv
+backend/**/__pycache__
+backend/.pytest_cache
+frontend/node_modules
+frontend/.angular
+frontend/dist
+frontend/test-results
+frontend/playwright-report

@@ -53,21 +53,15 @@ def apply_status_transition(ticket: Ticket, new_status: TicketStatus, current_us
         # "E-Mail bereits registriert"-Fall in auth.py.
         raise InvalidTransitionError(f"Übergang von '{ticket.status.value}' zu '{new_status.value}' ist nicht erlaubt")
 
-    if current_user.role not in allowed_roles:
+    if new_status not in get_allowed_next_statuses(ticket, current_user):
         # Wird zu 403 statt 401: current_user IST angemeldet (sonst waeren wir
         # nie hier), hat aber nicht die noetige Rolle. Authentifizierung ("wer
         # bist du?") hat also geklappt, Autorisierung ("was darfst du?") nicht.
         raise PermissionDeniedError("Für diesen Statuswechsel fehlt dir die Berechtigung")
 
-    # Zusaetzliche Pruefung auf OBJEKT-Ebene, nicht nur auf Rollen-Ebene: ein
-    # EMPLOYEE darf laut ALLOWED_TRANSITIONS zwar RESOLVED->IN_PROGRESS ausloesen
-    # (ablehnen), aber nur bei einem Ticket, das er/sie selbst gemeldet hat - nicht
-    # bei fremden Tickets. "Darf diese ROLLE das ueberhaupt" (oben) ist etwas
-    # anderes als "darf DIESER Nutzer das bei GENAU DIESEM Ticket" (hier).
-    if current_user.role == UserRole.EMPLOYEE and current_user.id != ticket.requester_id:
-        raise PermissionDeniedError("Nur der Melder eines Tickets darf es ablehnen")
-
     previous_status = ticket.status
+    if previous_status == TicketStatus.OPEN and new_status == TicketStatus.IN_PROGRESS:
+        ticket.assignee_id = current_user.id
     ticket.status = new_status
     now = datetime.now(timezone.utc)
     if new_status == TicketStatus.RESOLVED:
@@ -81,8 +75,7 @@ def apply_status_transition(ticket: Ticket, new_status: TicketStatus, current_us
         # abgelehntes Ticket weiter unter "Heute geloest" zaehlen. Wird es
         # spaeter erneut geloest, setzt der RESOLVED-Zweig oben den neuen
         # Zeitpunkt. (Den Verlauf "wann wurde wie oft abgelehnt" kann dieses
-        # eine Feld ohnehin nicht abbilden - dafuer braeuchte es eine eigene
-        # Historien-Tabelle.)
+        # eine Feld ohnehin nicht abbilden - der Verlauf steht in ticket_events.)
         ticket.resolved_at = None
 
 
@@ -105,4 +98,11 @@ def get_allowed_next_statuses(ticket: Ticket, current_user: User) -> list[Ticket
         for new_status, allowed_roles in possible_transitions.items()
         if current_user.role in allowed_roles
         and not (current_user.role == UserRole.EMPLOYEE and current_user.id != ticket.requester_id)
+        and not (
+            current_user.role == UserRole.AGENT
+            and (
+                (ticket.status == TicketStatus.OPEN and ticket.assignee_id not in {None, current_user.id})
+                or (new_status == TicketStatus.RESOLVED and ticket.assignee_id != current_user.id)
+            )
+        )
     ]

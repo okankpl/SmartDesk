@@ -56,7 +56,11 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     password_bytes = plain_password.encode("utf-8")
     if len(password_bytes) > BCRYPT_MAX_PASSWORD_BYTES:
         return False
-    return bcrypt.checkpw(password_bytes, hashed_password.encode("utf-8"))
+    try:
+        return bcrypt.checkpw(password_bytes, hashed_password.encode("utf-8"))
+    except ValueError:
+        # Legacy migration placeholders are not valid hashes or login accounts.
+        return False
 
 
 def create_access_token(user_id: int, role: str) -> str:

@@ -1,84 +1,68 @@
 <section class="dashboard" aria-labelledby="dashboard-title">
-  <!-- Überschrift der aktuellen Seite -->
-  <header class="page-header page-header--with-action">
-    <div>
-      <p class="eyebrow">Übersicht</p>
-      <h1 id="dashboard-title">Dashboard</h1>
+  <header class="page-header">
+    <div><p class="eyebrow">Arbeitsbereich</p><h1 id="dashboard-title">Dashboard</h1></div>
+    <div class="page-actions">
+      <span class="last-updated">@if (lastUpdated()) { Aktualisiert {{ lastUpdated() | date: 'HH:mm' }} }</span>
+      <button type="button" class="icon-button" title="Tickets aktualisieren" aria-label="Tickets aktualisieren" (click)="reloadTickets()" [disabled]="isRefreshing()">
+        <svg lucideRefreshCw [size]="17" [class.spin]="isRefreshing()"></svg>
+      </button>
+      <a routerLink="/tickets/new" class="button button--primary new-ticket-button"><svg lucidePlus [size]="18"></svg>Neues Ticket</a>
     </div>
-    <!-- routerLink statt href: navigiert innerhalb der Angular-App (kein
-         kompletter Seiten-Neuladen), Angular faengt den Klick ab und wechselt
-         nur die Route. -->
-    <a routerLink="/tickets/new" class="new-ticket-button">+ Neues Ticket</a>
   </header>
 
-  <!-- @if/@else if/@else ist Angulars Control-Flow-Syntax fuer eine
-       Mehrfach-Verzweigung (wie if/elif/else in Python) - hier drei sich
-       gegenseitig ausschliessende Zustaende: Fehler beim Laden, zum ersten
-       Mal am Laden, oder Daten vorhanden (auch waehrend eines Neuladens,
-       siehe isInitialLoading in dashboard.ts). Nur EIN Zweig wird jeweils
-       ins DOM eingefuegt, nicht alle drei gleichzeitig versteckt. -->
+  @if (announcement()) {
+    <div class="notice" role="status"><svg lucideCircleCheck [size]="18"></svg><span>{{ announcement() }}</span><button type="button" class="icon-button" aria-label="Meldung schließen" title="Meldung schließen" (click)="announcement.set(null)"><svg lucideX [size]="15"></svg></button></div>
+  }
   @if (ticketsError()) {
-    <!-- z.B. wenn die Session abgelaufen ist oder das Backend nicht erreichbar ist -->
-    <p class="error-state" role="alert">
-      Tickets konnten nicht geladen werden. Bitte Seite neu laden oder erneut einloggen.
-    </p>
-  } @else if (isInitialLoading()) {
-    <p class="loading-state">Tickets werden geladen…</p>
-  } @else {
-    <!-- Kennzahlen werden aus dem Zustand in dashboard.ts erzeugt -->
-    <div class="stat-grid">
-      <!-- @for durchlaeuft ein Array und wiederholt den Block pro Eintrag -
-           Angulars Ersatz fuer *ngFor. "track statistic.label" sagt Angular,
-           anhand welches (moeglichst eindeutigen) Werts es beim naechsten
-           Neu-Rendern erkennt, "das ist derselbe Eintrag wie vorher, nur
-           evtl. mit neuem Wert" statt ihn komplett neu aus dem DOM zu bauen -
-           wichtig fuer Performance und um z.B. Fokus/Animationen nicht zu
-           verlieren. -->
-      @for (statistic of statistics(); track statistic.label) {
-        <article class="stat-card">
-          <span>{{ statistic.label }}</span>
-          <strong>{{ statistic.value }}</strong>
-        </article>
-      }
-    </div>
+    <div class="notice notice--error" role="alert"><svg lucideTriangleAlert [size]="18"></svg><span>Tickets konnten nicht geladen werden.@if (lastUpdated()) { Stand von {{ lastUpdated() | date: 'HH:mm' }} Uhr. }</span><button type="button" class="button" (click)="reloadTickets()">Erneut laden</button></div>
+  }
+
+  @if (isInitialLoading()) {
+    <div class="loading-state" role="status"><svg lucideRefreshCw [size]="20" class="spin"></svg>Tickets werden geladen…</div>
+  } @else if (!ticketsError() || tickets().length > 0) {
+    <app-ticket-statistics [open]="openTicketCount()" [critical]="criticalIncidentCount()" [resolved]="resolvedTodayCount()" [progress]="inProgressTicketCount()" />
 
     <section class="ticket-section" aria-labelledby="ticket-section-title">
-      <div class="section-heading">
-        <p class="eyebrow">Arbeitsbereich</p>
-        <div class="section-heading__row">
-          <h2 id="ticket-section-title">{{ activeViewLabel() }}</h2>
-
-          <!-- Umschalter zwischen den vier Ticket-Ansichten -->
-          <div class="view-tabs" role="tablist" aria-label="Ticket-Ansicht wählen">
-            @for (tab of viewTabs; track tab.status) {
-              <button
-                type="button"
-                class="view-tabs__button"
-                [class.view-tabs__button--active]="activeView() === tab.status"
-                role="tab"
-                [attr.aria-selected]="activeView() === tab.status"
-                (click)="setActiveView(tab.status)">
-                {{ tab.label }}
-              </button>
-            }
-          </div>
+      <div class="section-heading"><h2 id="ticket-section-title">Tickets <span class="total-count">{{ tickets().length }}</span></h2>
+        <div class="display-switch" role="group" aria-label="Darstellung">
+          <button type="button" class="icon-button" [class.selected]="displayMode() === 'list'" [attr.aria-pressed]="displayMode() === 'list'" aria-label="Listenansicht" title="Listenansicht" (click)="displayMode.set('list')"><svg lucideList [size]="17"></svg></button>
+          <button type="button" class="icon-button" [class.selected]="displayMode() === 'cards'" [attr.aria-pressed]="displayMode() === 'cards'" aria-label="Kartenansicht" title="Kartenansicht" (click)="displayMode.set('cards')"><svg lucideLayoutGrid [size]="17"></svg></button>
         </div>
       </div>
 
-      <div class="ticket-grid">
-        <!-- @for mit @empty: der @empty-Block erscheint automatisch, wenn das
-             Array LEER ist - Angular prueft das selbst, kein "if (list.length
-             === 0)" noetig. -->
+      <div class="view-tabs" role="group" aria-label="Ticket-Ansicht wählen">
+        @for (tab of viewTabs; track tab.status) {
+          <button type="button" class="view-tabs__button" [class.view-tabs__button--active]="activeView() === tab.status" [attr.aria-pressed]="activeView() === tab.status" (click)="setActiveView(tab.status)">
+            {{ tab.label }}<span class="tab-count">{{ countForStatus(tab.status) }}</span>
+          </button>
+        }
+      </div>
+
+      <app-ticket-filters [support]="isSupport()" [(search)]="search" [(priority)]="priorityFilter" [(assignment)]="assignmentFilter" [(sort)]="sortOrder" />
+
+      <div class="result-bar">
+        <p class="result-count" role="status">{{ visibleTickets().length }} {{ visibleTickets().length === 1 ? 'Ticket' : 'Tickets' }}<span> · {{ activeViewLabel() }}</span></p>
+        @if (hasFilters()) { <button type="button" class="reset-filters" (click)="resetFilters()"><svg lucideX [size]="13"></svg>Zurücksetzen</button> }
+      </div>
+
+      @if (displayMode() === 'list' && visibleTickets().length) {
+        <div class="queue-head" aria-hidden="true"><span>Ticket</span><span>Status</span><span>Priorität</span><span class="column-assignee">Bearbeiter</span><span class="column-date">Erstellt</span></div>
+      }
+      <div class="ticket-grid" [class.ticket-grid--list]="displayMode() === 'list'" [attr.aria-busy]="isRefreshing()">
         @for (ticket of visibleTickets(); track ticket.id) {
-          <!-- (statusChanged): TicketCard weiss nicht, WIE die Gesamtliste neu
-               geladen wird - sie meldet nur "bei mir hat sich was getan" nach
-               oben, Dashboard entscheidet, was daraufhin passiert. -->
-          <app-ticket-card [ticket]="ticket" (statusChanged)="reloadTickets()" />
+          <app-ticket-card [ticket]="ticket" [compact]="displayMode() === 'list'" [highlighted]="ticket.id === createdId" (statusChanged)="onTicketChanged()" />
         } @empty {
-          <p class="empty-state">Keine Tickets in dieser Ansicht.</p>
+          <div class="empty-state">
+            <span class="empty-icon"><svg lucideInbox [size]="28"></svg></span>
+            <h3>{{ hasFilters() ? 'Keine passenden Tickets' : 'Keine Tickets in dieser Ansicht' }}</h3>
+            <div class="empty-actions">
+              @if (hasFilters()) { <button type="button" class="button" (click)="resetFilters()">Filter zurücksetzen</button> }
+              @if (tickets().length) { <button type="button" class="button button--quiet" (click)="showAllTickets()">Alle Tickets anzeigen</button> }
+              @else { <a routerLink="/tickets/new" class="button button--primary"><svg lucidePlus [size]="16"></svg>Neues Ticket</a> }
+            </div>
+          </div>
         }
       </div>
     </section>
   }
 </section>
-

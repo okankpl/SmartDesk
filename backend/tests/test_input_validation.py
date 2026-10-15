@@ -108,6 +108,12 @@ def test_ticket_update_leaves_omitted_fields_unset():
     assert payload.model_dump(exclude_unset=True) == {"priority": TicketPriority.HIGH}
 
 
+@pytest.mark.parametrize("version", [None, 0, -1, True, "1", 1.5])
+def test_ticket_update_rejects_invalid_expected_version(version):
+    with pytest.raises(ValidationError):
+        TicketUpdate.model_validate({"expected_version": version, "title": "Edited"})
+
+
 # --- Kommentare -------------------------------------------------------------
 
 

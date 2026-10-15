@@ -6,10 +6,12 @@ import { provideRouter } from '@angular/router';
 import { Dashboard } from './dashboard';
 import { Ticket } from '../../core/tickets/ticket';
 import { API_URL } from '../../core/api-url';
+import { Auth } from '../../core/auth/auth';
 
 function makeTicket(overrides: Partial<Ticket>): Ticket {
   return {
     id: 1,
+    version: 1,
     title: 'Testticket',
     description: null,
     status: 'open',
@@ -125,5 +127,70 @@ describe('Dashboard', () => {
 
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(text).toContain('konnten nicht geladen werden');
+  });
+
+  it('combines search and priority filters without changing the statistics', async () => {
+    await loadWith([
+      makeTicket({ id: 1, title: 'VPN-Ausfall', priority: 'critical' }),
+      makeTicket({ id: 2, title: 'VPN-Anfrage', priority: 'low' }),
+      makeTicket({ id: 3, title: 'Drucker', priority: 'critical' }),
+    ]);
+    const component = fixture.componentInstance;
+    component['search'].set(' vpn ');
+    component['priorityFilter'].set('critical');
+    expect(component['visibleTickets']().map(ticket => ticket.id)).toEqual([1]);
+    expect(component['openTicketCount']()).toBe(3);
+    component['resetFilters']();
+    expect(component['visibleTickets']().length).toBe(3);
+  });
+
+  it('filters tickets assigned to the current support user', async () => {
+    TestBed.inject(Auth).refreshCurrentUser().subscribe();
+    httpMock.expectOne(`${API_URL}/auth/me`).flush({ id: 42, role: 'agent', full_name: 'Agent', email: 'agent@example.com' });
+    await loadWith([makeTicket({ id: 1, assignee_id: 42 }), makeTicket({ id: 2, assignee_id: 99 })]);
+    fixture.componentInstance['assignmentFilter'].set('mine');
+    expect(fixture.componentInstance['visibleTickets']().map(ticket => ticket.id)).toEqual([1]);
+  });
+
+  it('counts matching tickets in every status tab and searches across statuses', async () => {
+    await loadWith([
+      makeTicket({ id: 1, title: 'VPN', status: 'open' }),
+      makeTicket({ id: 2, title: 'VPN', status: 'resolved' }),
+      makeTicket({ id: 3, title: 'Drucker', status: 'open' }),
+    ]);
+    const component = fixture.componentInstance;
+    component['search'].set('VPN');
+    expect(component['countForStatus']('open')).toBe(1);
+    expect(component['countForStatus']('resolved')).toBe(1);
+    expect(component['countForStatus']('all')).toBe(2);
+    component['setActiveView']('all');
+    expect(component['visibleTickets']().map(ticket => ticket.id)).toEqual([1, 2]);
+  });
+
+  it('sorts by priority and age with a deterministic tie breaker', async () => {
+    await loadWith([
+      makeTicket({ id: 1, priority: 'low', created_at: '2026-09-01T10:00:00Z' }),
+      makeTicket({ id: 2, priority: 'critical', created_at: '2026-09-03T10:00:00Z' }),
+      makeTicket({ id: 3, priority: 'critical', created_at: '2026-09-02T10:00:00Z' }),
+    ]);
+    const component = fixture.componentInstance;
+    expect(component['visibleTickets']().map(ticket => ticket.id)).toEqual([3, 2, 1]);
+    component['sortOrder'].set('oldest');
+    expect(component['visibleTickets']().map(ticket => ticket.id)).toEqual([1, 3, 2]);
+    component['sortOrder'].set('newest');
+    expect(component['visibleTickets']().map(ticket => ticket.id)).toEqual([2, 3, 1]);
+  });
+
+  it('keeps the last successful queue visible when refresh fails', async () => {
+    await loadWith([makeTicket({ id: 1 })]);
+    fixture.componentInstance['reloadTickets']();
+    fixture.detectChanges();
+    httpMock.expectOne(`${API_URL}/tickets`).flush({}, { status: 503, statusText: 'Unavailable' });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('[role=alert]')?.textContent).toContain('konnten nicht geladen');
+    expect(root.querySelectorAll('app-ticket-card').length).toBe(1);
+    expect(root.querySelector('.stat-grid')).not.toBeNull();
   });
 });

@@ -1,0 +1,96 @@
+name: smartdesk-demo
+
+x-backend: &backend
+  build:
+    context: ./backend
+    target: runtime
+  environment: &demo-environment
+    DATABASE_URL: postgresql+psycopg://demo:local-demo-only@postgres:5432/smartdesk_demo
+    SECRET_KEY: local-demo-signing-key-not-for-production-2026
+    DEMO_MODE: "true"
+    COOKIE_SECURE: "false"
+    FRONTEND_ORIGIN: http://localhost:8080
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: local-demo-only
+      POSTGRES_DB: smartdesk_demo
+    volumes:
+      - demo_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U demo -d smartdesk_demo"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+
+  setup:
+    <<: *backend
+    command: sh -c "alembic upgrade head && python -m app.seed_demo"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend:
+    <<: *backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --root-path /api
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    environment:
+      DOMAIN: ":80"
+    ports:
+      - "127.0.0.1:8080:80"
+      - "[::1]:8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/index.html"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  tests:
+    profiles: ["test"]
+    build:
+      context: ./backend
+      target: development
+    environment:
+      DATABASE_URL: postgresql+psycopg://demo:local-demo-only@test-postgres:5432/smartdesk_test
+      TEST_DATABASE_URL: postgresql+psycopg://demo:local-demo-only@test-postgres:5432/smartdesk_test
+      SECRET_KEY: isolated-integration-test-signing-key-2026
+    command: sh -c "alembic upgrade head && alembic check && pytest -v -p no:cacheprovider && ruff check --no-cache ."
+    depends_on:
+      test-postgres:
+        condition: service_healthy
+
+  test-postgres:
+    profiles: ["test"]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: local-demo-only
+      POSTGRES_DB: smartdesk_test
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U demo -d smartdesk_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  demo_data:

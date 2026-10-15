@@ -12,6 +12,7 @@
        vorliegt. -->
   @if (commentsError()) {
     <p class="ticket-comments__error" role="alert">Kommentare konnten nicht geladen werden.</p>
+    <button type="button" class="button" (click)="reloadComments()">Erneut laden</button>
   } @else if (isLoadingComments()) {
     <p class="ticket-comments__hint">Kommentare werden geladen…</p>
   } @else {
@@ -69,6 +70,7 @@
         <textarea
           rows="3"
           maxlength="5000"
+          placeholder="Antwort oder Rückfrage hinzufügen…"
           [value]="newCommentBody()"
           (input)="onBodyInput($event)"
           [disabled]="isSubmitting()"></textarea>
@@ -78,9 +80,12 @@
         <p class="ticket-comments__error" role="alert">{{ submitError() }}</p>
       }
 
-      <button type="submit" class="ticket-comments__submit" [disabled]="!canSubmit()">
-        Kommentar senden
-      </button>
+      <div class="ticket-comments__form-footer">
+        <span class="comment-length">{{ newCommentBody().length }} / 5.000</span>
+        <button type="submit" class="ticket-comments__submit button" [disabled]="!canSubmit()">
+          <svg lucideSend [size]="14"></svg>{{ isSubmitting() ? 'Wird gesendet…' : 'Kommentar senden' }}
+        </button>
+      </div>
     </form>
   }
 </section>

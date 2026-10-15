@@ -1,160 +1,115 @@
-// resource() ist Angulars API fuer asynchron geladene Daten als Signal (seit
-// neueren Angular-Versionen) - siehe ausfuehrliche Erklaerung beim Einsatz
-// unten. firstValueFrom (aus RxJS) wandelt ein Observable in ein Promise um,
-// weil resource()s "loader" ein Promise erwartet, HttpClient aber Observables
-// liefert.
 import { Component, computed, inject, resource, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { DatePipe } from '@angular/common';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
+import { LucidePlus, LucideX, LucideRefreshCw, LucideList, LucideLayoutGrid, LucideInbox, LucideTriangleAlert, LucideCircleCheck } from '@lucide/angular';
 
 import { TicketsService } from '../../core/tickets/tickets';
-import { TicketStatus } from '../../core/tickets/ticket';
+import { Ticket, TicketPriority, TicketStatus } from '../../core/tickets/ticket';
+import { Auth } from '../../core/auth/auth';
 import { TicketCard } from './ticket-card/ticket-card';
+import { TicketFilters, SortOrder } from './ticket-filters/ticket-filters';
+import { TicketStatistics } from './ticket-statistics/ticket-statistics';
 
-// Eigenstaendige Hilfsfunktion (keine Methode, weil sie keinen Zugriff auf
-// "this"/Komponenten-Zustand braucht) statt in der Klasse - so bleibt sie
-// einzeln testbar, ganz ohne eine Dashboard-Instanz zu erzeugen.
-//
-// Prueft, ob ein ISO-Datumsstring auf den heutigen Tag faellt (lokale
-// Zeitzone) - fuer die "Heute gelöst"-Kennzahl. Vergleicht nur Jahr/Monat/Tag,
-// nicht die Uhrzeit.
-function isToday(isoDate: string | null): boolean {
-  if (isoDate === null) {
-    return false;
-  }
-  // new Date("2026-08-23T12:11:53") parst einen ISO-8601-String zu einem
-  // JavaScript-Date-Objekt - JS hat (anders als Python mit datetime.fromisoformat)
-  // dafuer keinen eigenen Funktionsnamen, der Date-Konstruktor uebernimmt das Parsen.
-  const date = new Date(isoDate);
-  const now = new Date();
-  return (
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate()
-  );
+type TicketView = TicketStatus | 'all';
+const PRIORITY_ORDER: Record<TicketPriority, number> = { low: 0, medium: 1, high: 2, critical: 3 };
+
+function isToday(value: string | null): boolean {
+  if (!value) return false;
+  return new Date(value).toDateString() === new Date().toDateString();
 }
 
 @Component({
   selector: 'app-dashboard',
-  imports: [TicketCard, RouterLink],
+  imports: [TicketCard, TicketFilters, TicketStatistics, RouterLink, DatePipe, LucidePlus, LucideX, LucideRefreshCw, LucideList, LucideLayoutGrid, LucideInbox, LucideTriangleAlert, LucideCircleCheck],
   templateUrl: './dashboard.html',
-  styleUrls: ['./dashboard.scss'],
+  styleUrl: './dashboard.scss',
 })
 export class Dashboard {
   private readonly ticketsService = inject(TicketsService);
+  private readonly currentUser = inject(Auth).currentUser;
+  private readonly route = inject(ActivatedRoute);
+  private readonly lastSuccessfulTickets = signal<Ticket[] | null>(null);
+  protected readonly lastUpdated = signal<Date | null>(null);
+  protected readonly isSupport = computed(() => ['agent', 'admin'].includes(this.currentUser()?.role ?? ''));
+  protected readonly search = signal('');
+  protected readonly priorityFilter = signal<TicketPriority | ''>('');
+  protected readonly assignmentFilter = signal<'all' | 'mine' | 'unassigned'>('all');
+  protected readonly sortOrder = signal<SortOrder>('priority');
+  protected readonly displayMode = signal<'list' | 'cards'>('list');
+  protected readonly activeView = signal<TicketView>('open');
+  protected readonly hasFilters = computed(() => !!this.search().trim() || !!this.priorityFilter() || this.assignmentFilter() !== 'all');
+  protected readonly createdId = Number(this.route.snapshot.queryParamMap.get('created')) || null;
+  protected readonly announcement = signal<string | null>(
+    this.createdId ? 'Ticket SD-' + String(this.createdId).padStart(4, '0') + ' wurde erstellt.' : null,
+  );
 
-  // resource() laedt Tickets von GET /tickets und haelt Lade-/Fehlerzustand
-  // automatisch als Signals bereit (isLoading/error) - ohne resource() muesste
-  // man diese beiden Zustaende von Hand mit eigenen Signals nachbauen. Der
-  // "loader" laeuft automatisch einmal, sobald die Komponente erzeugt wird
-  // (kein manueller Aufruf noetig) - vergleichbar mit einem
-  // "componentDidMount"-Hook, nur signal-basiert statt Lifecycle-Callback.
   private readonly ticketsResource = resource({
-    loader: () => firstValueFrom(this.ticketsService.list()),
+    loader: async () => {
+      const tickets = await firstValueFrom(this.ticketsService.list());
+      this.lastSuccessfulTickets.set(tickets);
+      this.lastUpdated.set(new Date());
+      return tickets;
+    },
   });
 
-  // Wird per (statusChanged) aus einer TicketCard aufgerufen, wenn dort ein
-  // Statuswechsel erfolgreich war (siehe ticket-card.ts). reload() ist eine
-  // von resource() bereitgestellte Methode, die den "loader" von oben erneut
-  // ausfuehrt - so zeigt die Liste sofort den neuen Status, ohne dass die
-  // ganze Dashboard-Komponente neu aufgebaut werden muss.
-  protected reloadTickets(): void {
-    this.ticketsResource.reload();
-  }
-
-  // .value() ist bis zum ersten erfolgreichen Laden undefined - mit ?? [] hat
-  // der Rest der Komponente immer ein echtes Array, ohne ueberall extra auf
-  // undefined pruefen zu muessen. "??" ist der Nullish-Coalescing-Operator:
-  // nimmt die linke Seite, AUSSER sie ist null/undefined, dann die rechte.
-  protected readonly tickets = computed(() => this.ticketsResource.value() ?? []);
-  // Nur beim ALLERERSTEN Laden (es gibt noch gar keine Daten) zeigt das
-  // Dashboard den Lade-Hinweis. status() liefert einen von mehreren festen
-  // Zustaenden der resource(): 'loading' heisst "erster Ladevorgang",
-  // 'reloading' "laedt neu, die bisherigen Daten sind noch da". Vorher hing der
-  // Hinweis an isLoading(), das in BEIDEN Faellen true ist - nach jedem
-  // Statuswechsel (reloadTickets) verschwanden Kennzahlen und Ticketliste kurz
-  // komplett und tauchten dann wieder auf (Flackern). Jetzt bleibt die alte
-  // Liste stehen, bis die neue da ist.
-  protected readonly isInitialLoading = computed(() => this.ticketsResource.status() === 'loading');
-  // error ist selbst schon ein Signal, das resource() bereitstellt - hier nur
-  // unter einem eigenen, im Dashboard-Kontext sprechenderen Namen
-  // weitergereicht (kein computed(...) noetig, weil keine Umrechnung stattfindet).
+  // Keep the last successful queue visible when a refresh fails.
+  protected readonly tickets = computed(() => this.ticketsResource.hasValue()
+    ? this.ticketsResource.value() : this.lastSuccessfulTickets() ?? []);
+  protected readonly isInitialLoading = computed(() => this.ticketsResource.isLoading() && this.lastSuccessfulTickets() === null);
+  protected readonly isRefreshing = this.ticketsResource.isLoading;
   protected readonly ticketsError = this.ticketsResource.error;
 
-  // Filtert automatisch alle offenen Tickets aus dem Ticket-Zustand.
-  protected readonly openTickets = computed(() =>
-    this.tickets().filter((ticket) => ticket.status === 'open'),
-  );
-  // Gibt die Anzahl der offenen Tickets zurück.
+  protected readonly openTickets = computed(() => this.tickets().filter(ticket => ticket.status === 'open'));
   protected readonly openTicketCount = computed(() => this.openTickets().length);
-
-  // Filtert alle Tickets, die sich aktuell in Bearbeitung befinden.
-  protected readonly inProgressTickets = computed(() =>
-    this.tickets().filter((ticket) => ticket.status === 'in_progress'),
-  );
-  // Gibt die Anzahl der Tickets in Bearbeitung zurück.
+  protected readonly inProgressTickets = computed(() => this.tickets().filter(ticket => ticket.status === 'in_progress'));
   protected readonly inProgressTicketCount = computed(() => this.inProgressTickets().length);
+  protected readonly criticalIncidentCount = computed(() => this.tickets().filter(ticket =>
+    ticket.priority === 'critical' && ['open', 'in_progress'].includes(ticket.status)).length);
+  protected readonly resolvedTodayCount = computed(() => this.tickets().filter(ticket => isToday(ticket.resolved_at)).length);
 
-  // "Kritische Incidents": noch NICHT erledigte Tickets (offen oder in
-  // Bearbeitung) mit Priorität "critical" - ein bereits geschlossenes
-  // kritisches Ticket ist kein aktiver Incident mehr.
-  protected readonly criticalIncidentCount = computed(
-    () =>
-      this.tickets().filter(
-        (ticket) =>
-          ticket.priority === 'critical' && (ticket.status === 'open' || ticket.status === 'in_progress'),
-      ).length,
-  );
-
-  // "Heute gelöst": Tickets, deren resolved_at auf den heutigen Tag faellt.
-  // Bewusst resolved_at, nicht closed_at - "gelöst" ist im Datenmodell ein
-  // eigener, fachlich anderer Zeitpunkt als "final geschlossen" (siehe
-  // Architektur-Doku, Abschnitt 5).
-  protected readonly resolvedTodayCount = computed(
-    () => this.tickets().filter((ticket) => isToday(ticket.resolved_at)).length,
-  );
-
-  // Kennzahlen für die Statistik-Karten - alle vier jetzt aus echten Ticketdaten
-  // berechnet. computed() gibt hier ein ganzes Array von Objekten zurueck -
-  // sobald sich EINE der oben referenzierten computed()-Ketten aendert (z.B.
-  // openTicketCount), berechnet Angular auch dieses Array automatisch neu.
-  protected readonly statistics = computed(() => [
-    { label: 'Offene Tickets', value: this.openTicketCount() },
-    { label: 'Kritische Incidents', value: this.criticalIncidentCount() },
-    { label: 'Heute gelöst', value: this.resolvedTodayCount() },
-    { label: 'In Bearbeitung', value: this.inProgressTicketCount() },
-  ]);
-
-  // Die vier Ansichten, zwischen denen im Ticket-Bereich gewechselt werden kann
-  // (entspricht den vier Status im Ticket-Lifecycle). Eine einzige Quelle für
-  // Tab-Beschriftung, Abschnittsüberschrift und Filterlogik. Kein Signal (kein
-  // .set() noetig), weil sich diese Liste zur Laufzeit nie aendert - ein
-  // stinknormales, unveraenderliches Array-Feld reicht.
-  protected readonly viewTabs: { status: TicketStatus; label: string }[] = [
+  protected readonly viewTabs: { status: TicketView; label: string }[] = [
+    { status: 'all', label: 'Alle Tickets' },
     { status: 'open', label: 'Offene Tickets' },
     { status: 'in_progress', label: 'In Bearbeitung' },
     { status: 'resolved', label: 'Gelöste Tickets' },
     { status: 'closed', label: 'Geschlossene Tickets' },
   ];
+  protected readonly activeViewLabel = computed(() => this.viewTabs.find(tab => tab.status === this.activeView())!.label);
 
-  // Welcher Status ist gerade in der Ticket-Ansicht aktiv.
-  protected readonly activeView = signal<TicketStatus>('open');
-
-  // Beschriftung der aktuell aktiven Ansicht für die Abschnittsüberschrift.
-  protected readonly activeViewLabel = computed(() => {
-    const activeTab = this.viewTabs.find((tab) => tab.status === this.activeView());
-    return activeTab ? activeTab.label : '';
+  // Counts and the result list share the same filters, independent of the status tab.
+  private readonly filteredTickets = computed(() => {
+    const query = this.search().trim().toLocaleLowerCase('de');
+    return this.tickets().filter(ticket => {
+      const text = [ticket.title, ticket.description ?? '', ticket.requester_name ?? '', ticket.assignee_name ?? '', '#' + ticket.id, 'SD-' + String(ticket.id).padStart(4, '0')].join(' ').toLocaleLowerCase('de');
+      return (!query || text.includes(query))
+        && (!this.priorityFilter() || ticket.priority === this.priorityFilter())
+        && (this.assignmentFilter() !== 'mine' || ticket.assignee_id === this.currentUser()?.id)
+        && (this.assignmentFilter() !== 'unassigned' || ticket.assignee_id === null);
+    });
+  });
+  protected readonly visibleTickets = computed(() => {
+    const result = this.filteredTickets().filter(ticket => this.activeView() === 'all' || ticket.status === this.activeView());
+    return result.sort((a, b) => {
+      if (this.sortOrder() === 'newest') return Date.parse(b.created_at) - Date.parse(a.created_at) || b.id - a.id;
+      if (this.sortOrder() === 'oldest') return Date.parse(a.created_at) - Date.parse(b.created_at) || a.id - b.id;
+      return PRIORITY_ORDER[b.priority] - PRIORITY_ORDER[a.priority] || Date.parse(a.created_at) - Date.parse(b.created_at) || a.id - b.id;
+    });
   });
 
-  // Die sichtbare Ticketliste wird aus dem aktuell aktiven Status abgeleitet.
-  protected readonly visibleTickets = computed(() =>
-    this.tickets().filter((ticket) => ticket.status === this.activeView()),
-  );
-
-  // Wechselt die aktive Ansicht auf den übergebenen Status. Wird per (click)
-  // aus dashboard.html aufgerufen - eine "normale" Methode (kein Signal),
-  // weil sie einen Seiteneffekt AUSFUEHRT statt einen Wert zu BERECHNEN.
-  protected setActiveView(status: TicketStatus): void {
-    this.activeView.set(status);
+  protected countForStatus(status: TicketView): number {
+    return this.filteredTickets().filter(ticket => status === 'all' || ticket.status === status).length;
+  }
+  protected setActiveView(status: TicketView): void { this.activeView.set(status); }
+  protected resetFilters(): void {
+    this.search.set('');
+    this.priorityFilter.set('');
+    this.assignmentFilter.set('all');
+  }
+  protected showAllTickets(): void { this.resetFilters(); this.activeView.set('all'); }
+  protected reloadTickets(): void { this.ticketsResource.reload(); }
+  protected onTicketChanged(): void {
+    this.announcement.set('Die Änderungen wurden gespeichert.');
+    this.reloadTickets();
   }
 }

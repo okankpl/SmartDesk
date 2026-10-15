@@ -28,3 +28,7 @@ class PermissionDeniedError(DomainError):
 class InvalidTransitionError(DomainError):
     """Der gewuenschte Statuswechsel passt nicht zum aktuellen Zustand des
     Tickets (z.B. OPEN direkt nach CLOSED)."""
+
+
+class ValidationError(DomainError):
+    """An input violates a domain constraint beyond its JSON shape."""

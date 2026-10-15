@@ -1,52 +1,37 @@
-<!-- Dauerhaftes Grundgerüst der Anwendung -->
+<a class="skip-link" href="#main-content">Zum Inhalt</a>
 <div class="app-shell">
-
-  <!-- Seitenleiste mit Hauptnavigation -->
   <aside class="sidebar">
-    <a class="brand" routerLink="/dashboard">
-      SmartDesk
+    <a class="brand" routerLink="/dashboard" aria-label="SmartDesk Dashboard">
+      <span class="brand-mark"><svg lucideTicketCheck [size]="21"></svg></span>
+      <span>SmartDesk</span>
     </a>
-
-    <!-- Semantischer Bereich für Navigationslinks -->
     <nav class="navigation" aria-label="Hauptnavigation">
-      <a
-        routerLink="/dashboard"
-        routerLinkActive="active">
-        Dashboard
+      <span class="nav-label">Arbeitsplatz</span>
+      <a routerLink="/dashboard" [routerLinkActiveOptions]="{ exact: true }" ariaCurrentWhenActive="page" routerLinkActive="active" title="Dashboard">
+        <svg lucideLayoutDashboard [size]="18"></svg><span>Dashboard</span>
+      </a>
+      <a routerLink="/tickets/new" routerLinkActive="active" ariaCurrentWhenActive="page" title="Neues Ticket">
+        <svg lucideCirclePlus [size]="18"></svg><span>Neues Ticket</span>
       </a>
     </nav>
+    <div class="sidebar-footer"><svg lucideHeadset [size]="16"></svg><span>IT Service Desk</span></div>
   </aside>
 
-
   <div class="main-area">
-    <!-- Dauerhafte Kopfzeile -->
     <header class="topbar">
-      <span>IT Service Management</span>
-      <!-- "@if (currentUser(); as user)" prueft nicht nur, ob currentUser()
-           einen Wert hat, sondern speichert ihn zusaetzlich unter dem
-           lokalen Namen "user" fuer den gesamten Block - spart, currentUser()
-           im Block mehrfach neu aufzurufen, UND TypeScript weiss innerhalb
-           des Blocks sicher "user ist hier nie null" (ausserhalb des @if
-           koennte es das sein). -->
+      <div class="workspace"><span class="workspace-mark">SD</span><span>IT-Support</span></div>
       @if (currentUser(); as user) {
         <div class="user-info">
-          <!-- [attr.aria-label]="..." (Attribut-Binding mit "attr."-Praefix)
-               statt normalem [aria-label]="...": bei ARIA-Attributen braucht
-               es dieses Praefix, weil sie keine echten DOM-Properties von
-               HTMLElement sind (anders als z.B. [value] bei einem <input>),
-               sondern nur als HTML-Attribute existieren. -->
-          <div class="user-avatar" [attr.aria-label]="'Angemeldeter Benutzer ' + user.full_name">
-            {{ initials() }}
-          </div>
-          <button type="button" class="logout-button" (click)="logout()">Abmelden</button>
+          <div class="user-avatar" aria-hidden="true">{{ initials() }}</div>
+          <div class="user-name"><span>{{ user.full_name }}</span><small>{{ roleLabel() }}</small></div>
+          <button type="button" class="icon-button logout-button" (click)="logout()" [disabled]="isLoggingOut()" aria-label="Abmelden" title="Abmelden">
+            <svg lucideLogOut [size]="18"></svg>
+          </button>
         </div>
       }
     </header>
-
-    <!-- Der wechselnde Seiteninhalt -->
-    <main class="content">
-      <!-- Hier setzt Angular je nach aktueller URL Dashboard oder
-           TicketCreate ein (siehe app.routes.ts, "children"). -->
+    <main class="content" id="main-content" tabindex="-1">
+      @if (logoutError()) { <p class="notice notice--error" role="alert">{{ logoutError() }}</p> }
       <router-outlet />
     </main>
   </div>

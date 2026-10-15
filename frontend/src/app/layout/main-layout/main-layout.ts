@@ -1,5 +1,6 @@
 // Grundfunktion zum Erstellen einer Angular-Komponente
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
+import { LucideTicketCheck, LucideLayoutDashboard, LucideCirclePlus, LucideHeadset, LucideLogOut } from '@lucide/angular';
 
 // Werkzeuge für Navigation und die Anzeige untergeordneter Seiten.
 // RouterLink/RouterLinkActive werden fuer die Navigationslinks im Template
@@ -15,12 +16,13 @@ import {
 } from '@angular/router';
 
 import { Auth } from '../../core/auth/auth';
+import { errorMessageFor } from '../../core/http-error-message';
 
 @Component({
   selector: 'app-main-layout',
 
   // Diese Direktiven werden im HTML-Template verwendet
-  imports: [RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [RouterLink, RouterLinkActive, RouterOutlet, LucideTicketCheck, LucideLayoutDashboard, LucideCirclePlus, LucideHeadset, LucideLogOut],
 
   templateUrl: './main-layout.html',
   styleUrl: './main-layout.scss'
@@ -28,11 +30,14 @@ import { Auth } from '../../core/auth/auth';
 export class MainLayout {
   private readonly auth = inject(Auth);
   private readonly router = inject(Router);
+  protected readonly isLoggingOut = signal(false);
+  protected readonly logoutError = signal<string | null>(null);
 
   // Kommt garantiert nicht-null vor, solange authGuard diese Route schützt -
   // trotzdem als Signal durchgereicht statt einmalig kopiert, falls sich der
   // Nutzer künftig innerhalb derselben Session ändern könnte.
   protected readonly currentUser = this.auth.currentUser;
+  protected readonly roleLabel = computed(() => ({ employee: 'Mitarbeitende', agent: 'Support', admin: 'Administration' })[this.currentUser()?.role ?? 'employee']);
 
   // Initialen aus dem vollen Namen fürs Avatar, z.B. "Max Muster" -> "MM".
   protected readonly initials = computed(() => {
@@ -60,6 +65,15 @@ export class MainLayout {
   });
 
   protected logout(): void {
-    this.auth.logout().subscribe(() => this.router.navigateByUrl('/login'));
+    if (this.isLoggingOut()) return;
+    this.isLoggingOut.set(true);
+    this.logoutError.set(null);
+    this.auth.logout().subscribe({
+      next: () => { void this.router.navigateByUrl('/login'); },
+      error: (error: unknown) => {
+        this.isLoggingOut.set(false);
+        this.logoutError.set(errorMessageFor(error, {}, 'Abmelden gerade nicht möglich. Bitte erneut versuchen.'));
+      },
+    });
   }
 }

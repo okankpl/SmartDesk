@@ -1,8 +1,9 @@
 import json
 
 import pytest
+from sqlalchemy.orm.exc import StaleDataError
 
-from app.core.error_handlers import DOMAIN_ERROR_STATUS_CODES, domain_error_handler
+from app.core.error_handlers import DOMAIN_ERROR_STATUS_CODES, domain_error_handler, stale_data_handler
 from app.services.errors import DomainError, InvalidTransitionError, PermissionDeniedError, TicketNotFoundError
 
 
@@ -37,3 +38,13 @@ def test_app_registers_the_domain_error_handler():
     from app.main import app
 
     assert app.exception_handlers[DomainError] is domain_error_handler
+
+
+def test_stale_orm_changes_return_a_safe_conflict_response():
+    from app.main import app
+
+    response = stale_data_handler(None, StaleDataError("Internal database details"))
+    assert response.status_code == 409
+    assert "inzwischen geändert" in json.loads(response.body)["detail"]
+    assert "Internal database details" not in response.body.decode()
+    assert app.exception_handlers[StaleDataError] is stale_data_handler

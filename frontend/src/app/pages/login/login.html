@@ -1,51 +1,18 @@
 <div class="login-page">
-  <!-- (submit) statt Angulars (ngSubmit): ngSubmit gehoert zum FormsModule, das
-       wir hier bewusst nicht einbinden (siehe login.ts) - das native
-       Browser-"submit"-Ereignis reicht, solange wir es per event.preventDefault()
-       in submit() selbst abfangen. -->
-  <form class="login-card" (submit)="submit($event)">
-    <p class="brand">SmartDesk</p>
-    <h1>Anmelden</h1>
-
-    <!-- role="status": Screenreader lesen den Hinweis vor, sobald er
-         erscheint, ohne den Lesefluss zu unterbrechen (anders als
-         role="alert" bei echten Fehlern weiter unten). -->
-    @if (sessionExpired) {
-      <p class="info" role="status">Deine Sitzung ist abgelaufen. Bitte melde dich erneut an.</p>
-    }
-
-    <label class="field">
-      <span>E-Mail</span>
-      <!-- [value]="..." ist "Property Binding": schreibt den Signal-Wert IN das
-           Input-Feld hinein (einseitig, von Komponente -> DOM).
-           (input)="..." ist "Event Binding": ruft bei jeder Nutzereingabe eine
-           Methode auf (einseitig, von DOM -> Komponente). Zusammen ergibt das
-           dasselbe wie Angulars [(ngModel)] (Two-Way-Binding), nur explizit in
-           zwei Richtungen aufgeschrieben statt in einer Kurzschreibweise - und
-           ohne FormsModule-Abhaengigkeit. -->
-      <input type="email" [value]="email()" (input)="onEmailInput($event)" required autocomplete="email" />
-    </label>
-
-    <label class="field">
-      <span>Passwort</span>
-      <input
-        type="password"
-        [value]="password()"
-        (input)="onPasswordInput($event)"
-        required
-        autocomplete="current-password" />
-    </label>
-
-    <!-- @if ist Angulars neuere Control-Flow-Syntax (seit Angular 17, siehe
-         Architektur-Doku Abschnitt 8) fuer bedingtes Rendern - ersetzt das
-         aeltere *ngIf. Der Block wird nur ins DOM eingefuegt, wenn
-         errorMessage() nicht null/leer ist. -->
-    @if (errorMessage()) {
-      <p class="error" role="alert">{{ errorMessage() }}</p>
-    }
-
-    <button type="submit" [disabled]="isSubmitting()">
-      {{ isSubmitting() ? 'Wird geprüft…' : 'Anmelden' }}
-    </button>
-  </form>
+  <div class="auth-shell">
+    <a class="brand" routerLink="/login"><span class="brand-mark"><svg lucideTicketCheck [size]="22"></svg></span>SmartDesk</a>
+    <form class="login-card" (submit)="submit($event)">
+      <h1>Anmelden</h1>
+      @if (accountCreated) { <p class="info" role="status">Dein Konto wurde erstellt. Du kannst dich jetzt anmelden.</p> }
+      @if (sessionExpired) { <p class="info" role="status">Deine Sitzung ist abgelaufen. Bitte melde dich erneut an.</p> }
+      <div class="field"><label for="login-email">E-Mail</label><input id="login-email" name="email" type="email" placeholder="name@unternehmen.de" [value]="email()" (input)="onEmailInput($event)" required autocomplete="email" /></div>
+      <div class="field"><label for="login-password">Passwort</label><div class="password-field">
+        <input id="login-password" name="password" [type]="passwordVisible() ? 'text' : 'password'" [value]="password()" (input)="onPasswordInput($event)" required autocomplete="current-password" />
+        <button type="button" class="password-toggle" [attr.aria-label]="passwordVisible() ? 'Passwort verbergen' : 'Passwort anzeigen'" [title]="passwordVisible() ? 'Passwort verbergen' : 'Passwort anzeigen'" [attr.aria-pressed]="passwordVisible()" (click)="passwordVisible.set(!passwordVisible())">@if (passwordVisible()) { <svg lucideEyeOff [size]="17"></svg> } @else { <svg lucideEye [size]="17"></svg> }</button>
+      </div></div>
+      @if (errorMessage()) { <p class="error" role="alert">{{ errorMessage() }}</p> }
+      <button type="submit" class="button button--primary auth-submit" [disabled]="isSubmitting()">{{ isSubmitting() ? 'Wird geprüft…' : 'Anmelden' }}<svg lucideArrowRight [size]="17"></svg></button>
+      <p class="auth-link">Noch kein Konto? <a routerLink="/register">Registrieren</a></p>
+    </form>
+  </div>
 </div>

@@ -1,0 +1,25 @@
+<section class="ticket-editor" aria-labelledby="edit-heading-{{ ticket().id }}">
+  <h3 id="edit-heading-{{ ticket().id }}">Ticket bearbeiten</h3>
+  <form [id]="formId()" (submit)="submit($event)" [attr.aria-busy]="busy()">
+    <div class="field">
+      <div class="field-heading"><label for="edit-title-{{ ticket().id }}">Titel</label><span class="character-count">{{ title().length }} / 200</span></div>
+      <input #titleInput id="edit-title-{{ ticket().id }}" name="title" [(ngModel)]="title" [disabled]="busy()" required maxlength="200" [attr.aria-invalid]="!!titleError()" [attr.aria-describedby]="titleError() ? 'edit-title-error-' + ticket().id : null" />
+      @if (titleError()) { <small class="field-error" id="edit-title-error-{{ ticket().id }}" role="alert">{{ titleError() }}</small> }
+    </div>
+    <div class="field">
+      <div class="field-heading"><label for="edit-description-{{ ticket().id }}">Beschreibung <span class="optional">(optional)</span></label><span class="character-count">{{ description().length }} / 10.000</span></div>
+      <textarea id="edit-description-{{ ticket().id }}" name="description" rows="6" [(ngModel)]="description" [disabled]="busy()" maxlength="10000" [attr.aria-invalid]="!!descriptionError()" [attr.aria-describedby]="descriptionError() ? 'edit-description-error-' + ticket().id : null"></textarea>
+      @if (descriptionError()) { <small class="field-error" id="edit-description-error-{{ ticket().id }}" role="alert">{{ descriptionError() }}</small> }
+    </div>
+    <div class="field priority-field">
+      <label for="edit-priority-{{ ticket().id }}">Priorität</label>
+      <select id="edit-priority-{{ ticket().id }}" name="priority" [(ngModel)]="priority" [disabled]="busy()">
+        @for (option of priorityOptions; track option[0]) { <option [value]="option[0]">{{ option[1] }}</option> }
+      </select>
+    </div>
+    @if (error()) { <p role="alert" class="notice notice--error">{{ error() }}</p> }
+    @if (conflict()) {
+      <button type="button" class="button reload-button" [disabled]="busy()" (click)="reload()"><svg lucideRefreshCw [size]="16"></svg>Entwurf verwerfen und neu laden</button>
+    }
+  </form>
+</section>

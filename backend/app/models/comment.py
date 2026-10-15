@@ -1,10 +1,11 @@
 from datetime import datetime
 
 from sqlalchemy import ForeignKey, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.core.database import Base
+from app.models.user import User
 
 
 class Comment(Base):
@@ -38,6 +39,11 @@ class Comment(Base):
         ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False, index=True
     )
     author_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    author: Mapped[User] = relationship(lazy="joined")
+
+    @property
+    def author_name(self) -> str | None:
+        return self.author.full_name if self.author else None
     # Text statt String(n): kein Laengenlimit noetig, wie schon bei
     # Ticket.description (siehe models/ticket.py).
     body: Mapped[str] = mapped_column(Text)

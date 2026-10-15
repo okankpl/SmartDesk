@@ -1,13 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_roles
-from app.models.ticket import Ticket
+from app.models.ticket import Ticket, TicketStatus
 from app.models.user import User, UserRole
 from app.schemas.ticket import TicketCreate, TicketRead, TicketStatusUpdate, TicketUpdate
 from app.services.ticket_access import get_visible_ticket_or_404, visible_tickets_query
 from app.services.ticket_lifecycle import apply_status_transition, get_allowed_next_statuses
+from app.services.ticket_assignment import validate_assignment
+from app.services.ticket_history import record_event
+from app.services.errors import InvalidTransitionError
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
 
@@ -75,6 +79,8 @@ def create_ticket(
     # mit 401 abgebrochen).
     ticket = Ticket(**payload.model_dump(), requester_id=current_user.id)
     db.add(ticket)
+    db.flush()
+    record_event(db, ticket, current_user, "created", {"status": {"old": None, "new": "open"}})
     db.commit()
     db.refresh(ticket)
     return _to_ticket_read(ticket, current_user)
@@ -102,24 +108,37 @@ def update_ticket(
     # Endpunkt ein (Ablehnen einer Loesung, siehe ticket_lifecycle.py).
     current_user: User = Depends(require_roles(UserRole.AGENT, UserRole.ADMIN)),
 ) -> TicketRead:
-    ticket = db.get(Ticket, ticket_id)
+    ticket = db.scalar(select(Ticket).where(Ticket.id == ticket_id).with_for_update(of=Ticket))
     if ticket is None:
         raise HTTPException(status_code=404, detail="Ticket nicht gefunden")
 
-    if payload.assignee_id is not None and db.get(User, payload.assignee_id) is None:
-        raise HTTPException(status_code=404, detail="assignee_id verweist auf keinen existierenden User")
+    if ticket.status == TicketStatus.CLOSED:
+        raise InvalidTransitionError("Geschlossene Tickets können nicht mehr geändert werden")
+    # Compare while holding the row lock, before applying changes or recording history.
+    if payload.expected_version is not None and payload.expected_version != ticket.version:
+        raise InvalidTransitionError("Das Ticket wurde inzwischen geändert. Bitte aktuellen Stand laden.")
+    if "assignee_id" in payload.model_fields_set:
+        assignee = db.get(User, payload.assignee_id) if payload.assignee_id is not None else None
+        if payload.assignee_id is not None and assignee is None:
+            raise HTTPException(status_code=404, detail="Bearbeiter nicht gefunden")
+        validate_assignment(ticket, assignee, current_user)
 
     # model_dump(exclude_unset=True): nimmt NUR Felder mit, die im Request tatsaechlich
     # mitgeschickt wurden (nicht einfach alle, die Pydantic mit None befuellt haette).
     # Sonst wuerde ein PATCH mit nur {"title": "..."} versehentlich auch priority und
     # assignee_id auf None zuruecksetzen.
-    updates = payload.model_dump(exclude_unset=True)
+    updates = payload.model_dump(exclude_unset=True, exclude={"expected_version"})
+    changes = {
+        field: {"old": getattr(ticket, field), "new": value}
+        for field, value in updates.items() if getattr(ticket, field) != value
+    }
     for field, value in updates.items():
         # setattr(objekt, "feldname", wert) ist das dynamische Gegenstueck zu
         # "objekt.feldname = wert" - hier noetig, weil der Feldname erst zur Laufzeit
         # aus der Schleife kommt, nicht fest im Code steht.
         setattr(ticket, field, value)
 
+    record_event(db, ticket, current_user, "updated", changes)
     db.commit()
     db.refresh(ticket)
     return _to_ticket_read(ticket, current_user)
@@ -138,13 +157,22 @@ def update_ticket_status(
     # Ticket existiert UND welchen Status es hat (409 "Übergang von
     # 'in_progress' zu ... nicht erlaubt") - ein Informationsleck (IDOR).
     # Jetzt gilt dieselbe Regel wie bei GET /tickets/{id}: fremd = 404.
-    ticket = get_visible_ticket_or_404(db.get(Ticket, ticket_id), current_user)
+    # Lock only the ticket row, not the outer-joined users. Concurrent claims
+    # must evaluate permissions against the state committed by the winner.
+    ticket = get_visible_ticket_or_404(
+        db.scalar(select(Ticket).where(Ticket.id == ticket_id).with_for_update(of=Ticket)), current_user,
+    )
+    previous_status, previous_assignee = ticket.status, ticket.assignee_id
 
     # Prueft die Uebergangs- und Rollenregeln und setzt bei Erfolg ticket.status
-    # (+ resolved_at/closed_at) direkt auf dem Objekt - wirft sonst eine
-    # passende HTTPException (409/403), siehe ticket_lifecycle.py.
+    # (+ Bearbeiter und Zeitstempel) auf dem Objekt; fachliche Fehler werden
+    # vom zentralen Handler in HTTP-Antworten uebersetzt.
     apply_status_transition(ticket, payload.status, current_user)
 
+    changes = {"status": {"old": previous_status.value, "new": ticket.status.value}}
+    if previous_assignee != ticket.assignee_id:
+        changes["assignee_id"] = {"old": previous_assignee, "new": ticket.assignee_id}
+    record_event(db, ticket, current_user, "status_changed", changes)
     db.commit()
     db.refresh(ticket)
     return _to_ticket_read(ticket, current_user)

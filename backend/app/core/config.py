@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     # Produktion MUSS das True sein, sonst schuetzt HttpOnly allein nicht vor
     # einem Angreifer, der den Netzwerkverkehr mitliest.
     cookie_secure: bool = False
+    # Only the isolated demo stack enables known, documented credentials.
+    demo_mode: bool = False
 
     # "Fail Fast" beim Start: lieber startet das Backend gar nicht (mit
     # klarer Fehlermeldung), als dass es mit einem erratbaren Schluessel

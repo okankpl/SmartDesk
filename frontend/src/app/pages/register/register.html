@@ -1,0 +1,17 @@
+<div class="login-page">
+  <div class="auth-shell">
+    <a class="brand" routerLink="/login"><span class="brand-mark"><svg lucideTicketCheck [size]="22"></svg></span>SmartDesk</a>
+    <form class="login-card" (submit)="submit($event)">
+      <h1>Konto erstellen</h1>
+      <label class="field"><span>Vollständiger Name</span><input name="full_name" autocomplete="name" required maxlength="200" /></label>
+      <label class="field"><span>E-Mail</span><input name="email" type="email" placeholder="name@unternehmen.de" autocomplete="email" required maxlength="255" /></label>
+      <label class="field"><span>Passwort</span><input name="password" [type]="passwordVisible() ? 'text' : 'password'" autocomplete="new-password" required minlength="8" aria-describedby="password-rule" /></label>
+      <small id="password-rule" class="password-hint">Mindestens 8 Zeichen, höchstens 72 Bytes.</small>
+      <label class="field"><span>Passwort wiederholen</span><input name="confirmation" [type]="passwordVisible() ? 'text' : 'password'" autocomplete="new-password" required minlength="8" /></label>
+      <label class="show-password"><input type="checkbox" [checked]="passwordVisible()" (change)="passwordVisible.set(!passwordVisible())" />Passwörter anzeigen</label>
+      @if (errorMessage()) { <p class="error" role="alert">{{ errorMessage() }}</p> }
+      <button type="submit" class="button button--primary auth-submit" [disabled]="isSubmitting()">{{ isSubmitting() ? 'Wird erstellt…' : 'Konto erstellen' }}<svg lucideArrowRight [size]="17"></svg></button>
+      <p class="auth-link">Bereits registriert? <a routerLink="/login">Anmelden</a></p>
+    </form>
+  </div>
+</div>

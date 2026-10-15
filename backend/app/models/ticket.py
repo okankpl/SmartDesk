@@ -3,10 +3,11 @@ from datetime import datetime
 
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy import ForeignKey, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.core.database import Base
+from app.models.user import User
 
 
 class TicketStatus(str, enum.Enum):
@@ -37,6 +38,9 @@ class Ticket(Base):
     __tablename__ = "tickets"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    version: Mapped[int] = mapped_column(nullable=False, server_default="1")
+    __mapper_args__ = {"version_id_col": version}
+
     title: Mapped[str] = mapped_column(String(200))
     # Text statt String(n): kein Laengenlimit, passend fuer laengere Beschreibungen.
     # nullable=True, weil das Feld im Dashboard-Mock bisher gar nicht existierte -
@@ -62,6 +66,18 @@ class Ticket(Base):
     # assignee_id ist nullable: ein neues Ticket hat noch niemanden, der es bearbeitet
     # ("open" = niemand hat es geclaimt).
     assignee_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+    # Joined loading avoids one query per name when listing the queue.
+    requester: Mapped[User] = relationship(foreign_keys=[requester_id], lazy="joined")
+    assignee: Mapped[User | None] = relationship(foreign_keys=[assignee_id], lazy="joined")
+
+    @property
+    def requester_name(self) -> str | None:
+        return self.requester.full_name if self.requester else None
+
+    @property
+    def assignee_name(self) -> str | None:
+        return self.assignee.full_name if self.assignee else None
 
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())

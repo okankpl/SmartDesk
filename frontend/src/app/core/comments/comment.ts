@@ -13,9 +13,8 @@
 export interface TicketComment {
   id: number;
   ticket_id: number;
-  // Nur die ID, kein Name - das Backend liefert (noch) keinen Autorennamen mit,
-  // siehe authorLabel() in ticket-card.ts, wie das im Popup angezeigt wird.
   author_id: number;
+  author_name?: string | null;
   body: string;
   // ISO-8601-String wie bei Ticket.created_at, kein Date-Objekt.
   created_at: string;
