@@ -96,6 +96,10 @@ Backend einschließlich Migrationen, Modelldrift, Unit-/HTTP-Tests, konkurrieren
 
 ```bash
 docker compose -f docker-compose.demo.yml --profile test run --build --rm tests
+
+# Die Testdatenbank und der Test-Redis laufen danach weiter; das stoppt sie
+# (zusammen mit einer eventuell laufenden Demo, deren Daten erhalten bleiben).
+docker compose -f docker-compose.demo.yml --profile test down
 ```
 
 Die Tests verändern keine Demo-Daten. PostgreSQL-Integrationstests benötigen eine explizite `TEST_DATABASE_URL` mit Datenbankname auf `_test`, Redis-Integrationstests `TEST_REDIS_URL`; ohne diese werden die jeweiligen Tests lokal übersprungen. Die CI führt beide aus.
