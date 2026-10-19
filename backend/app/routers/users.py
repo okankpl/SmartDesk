@@ -25,7 +25,10 @@ router = APIRouter(
 
 @router.get("", response_model=list[UserRead])
 def list_users(db: Session = Depends(get_db)) -> list[User]:
-    return list(db.execute(select(User)).scalars().all())
+    # Alphabetisch nach Namen (id als Tie-Breaker): ohne ORDER BY ist die
+    # Reihenfolge in SQL nicht festgelegt - die Bearbeiter-Auswahl im
+    # Ticketdialog haette ihre Eintraege sonst in wechselnder Reihenfolge gezeigt.
+    return list(db.execute(select(User).order_by(User.full_name, User.id)).scalars().all())
 
 
 @router.get("/{user_id}", response_model=UserRead)

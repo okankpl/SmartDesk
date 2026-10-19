@@ -16,9 +16,16 @@ import { errorMessageFor } from '../../../core/http-error-message';
     } @else {
       <form (submit)="save($event)">
         <div class="assignment-field"><label [for]="'assignee-' + ticket().id">Bearbeiter zuweisen</label>
-          <select [id]="'assignee-' + ticket().id" name="assignee_id" [value]="ticket().assignee_id ?? ''" [disabled]="disabled() || users.isLoading() || busy()">
-            <option value="" [disabled]="ticket().status !== 'open'">Nicht zugewiesen</option>
-            @for (person of agents(); track person.id) { <option [value]="person.id">{{ person.full_name }}</option> }
+          <!-- [selected] an jeder Option statt [value] am <select>: die Personen
+               werden erst NACH dem ersten Rendern geladen. Ein frueh gesetztes
+               [value] fand noch keine passende Option, und der Browser waehlte
+               spaeter einfach die erste erlaubte - bei einem Ticket von Samira
+               Kaya stand dann "Alex Weber" in der Auswahl. -->
+          <select [id]="'assignee-' + ticket().id" name="assignee_id" [disabled]="disabled() || users.isLoading() || busy()">
+            <option value="" [disabled]="ticket().status !== 'open'" [selected]="ticket().assignee_id === null">Nicht zugewiesen</option>
+            @for (person of agents(); track person.id) {
+              <option [value]="person.id" [selected]="person.id === ticket().assignee_id">{{ person.full_name }}</option>
+            }
           </select>
         </div>
         <button type="submit" class="button" [disabled]="disabled() || users.isLoading() || busy()">{{ busy() ? 'Wird gespeichert…' : 'Zuweisen' }}</button>
