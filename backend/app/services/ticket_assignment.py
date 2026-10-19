@@ -4,7 +4,9 @@ from app.services.errors import InvalidTransitionError, PermissionDeniedError, V
 
 
 def validate_assignment(ticket: Ticket, assignee: User | None, current_user: User) -> None:
-    """Keep active tickets assigned and reserve delegation to administrators."""
+    """Prueft eine Zuweisung: aktive Tickets behalten immer einen Bearbeiter,
+    zugewiesen werden duerfen nur Agents/Admins, und an andere Personen
+    (oder von anderen weg) zuweisen duerfen nur Admins."""
     if ticket.status == TicketStatus.CLOSED:
         raise InvalidTransitionError("Geschlossene Tickets können nicht mehr geändert werden")
     if assignee is not None and assignee.role not in {UserRole.AGENT, UserRole.ADMIN}:

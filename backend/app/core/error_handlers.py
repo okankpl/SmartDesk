@@ -39,6 +39,9 @@ def register_error_handlers(app: FastAPI) -> None:
 
 
 def stale_data_handler(request: Request, exc: StaleDataError) -> JSONResponse:
+    """Versionskonflikt, den SQLAlchemy selbst beim UPDATE erkennt (version_id_col,
+    siehe models/ticket.py): als verstaendlicher 409 statt als 500 - bewusst ohne
+    die technischen Details aus der Exception."""
     return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={
         "detail": "Das Ticket wurde inzwischen geändert oder gelöscht. Bitte aktuellen Stand laden.",
     })

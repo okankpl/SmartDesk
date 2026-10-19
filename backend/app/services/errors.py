@@ -31,4 +31,5 @@ class InvalidTransitionError(DomainError):
 
 
 class ValidationError(DomainError):
-    """An input violates a domain constraint beyond its JSON shape."""
+    """Eine Eingabe verletzt eine fachliche Regel, die ueber die reine JSON-Form
+    hinausgeht (z.B. "nur Support-Mitarbeitende duerfen bearbeiten") - wird zu 422."""

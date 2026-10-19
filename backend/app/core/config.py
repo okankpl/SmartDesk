@@ -53,8 +53,12 @@ class Settings(BaseSettings):
     # Produktion MUSS das True sein, sonst schuetzt HttpOnly allein nicht vor
     # einem Angreifer, der den Netzwerkverkehr mitliest.
     cookie_secure: bool = False
-    # Only the isolated demo stack enables known, documented credentials.
+    # Nur der getrennte Demo-Stack (docker-compose.demo.yml) setzt das auf true -
+    # erst dann legt app/seed_demo.py die bekannten, dokumentierten Demo-Konten an.
     demo_mode: bool = False
+    # Login-Drosselung (siehe core/login_rate_limit.py): gemeinsamer Redis-Speicher
+    # fuer alle Backend-Prozesse und je ein Budget pro IP und pro E-Mail-Adresse.
+    # Field(ge=..., le=...) lehnt unsinnige Werte schon beim Start ab.
     login_rate_limit_storage_uri: str = "redis://redis:6379/0"
     login_rate_limit_ip_attempts: int = Field(default=30, ge=1, le=10000)
     login_rate_limit_ip_window_seconds: int = Field(default=60, ge=1, le=86400)

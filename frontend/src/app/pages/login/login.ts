@@ -41,9 +41,9 @@ export class Login {
 
   // Eigener, lokaler Formular-Zustand als Signals statt Angulars
   // FormsModule/ReactiveFormsModule - bei nur zwei simplen Textfeldern
-  // reicht das, ohne eine zusaetzliche Abhaengigkeit einzubinden (siehe YAGNI
-  // in der Architektur-Doku). email()/password() lesen den aktuellen Wert,
-  // .set(...) aendert ihn.
+  // reicht das (YAGNI). FormsModule kommt erst bei den groesseren Formularen
+  // zum Einsatz (Ticket-Editor, Filter). email()/password() lesen den
+  // aktuellen Wert, .set(...) aendert ihn.
   protected readonly email = signal('');
   protected readonly password = signal('');
   protected readonly errorMessage = signal<string | null>(null);
@@ -65,7 +65,8 @@ export class Login {
     clearInterval(this.cooldownTimer);
     this.retryAfterSeconds.set(seconds);
     this.cooldownTimer = setInterval(() => {
-      // Use elapsed time so background-tab timer throttling cannot extend the wait.
+      // Mit der tatsaechlich verstrichenen Zeit rechnen: Browser drosseln Timer
+      // in Hintergrund-Tabs, das darf die angezeigte Wartezeit nicht verlaengern.
       const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
       this.retryAfterSeconds.set(remaining);
       if (remaining === 0) clearInterval(this.cooldownTimer);

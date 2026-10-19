@@ -1,4 +1,5 @@
-"""Idempotent sample data for the isolated demo, never for production."""
+"""Beispieldaten fuer die getrennte Demo, nie fuer Produktion. Idempotent: ein
+erneuter Start legt nichts doppelt an und ueberschreibt nichts."""
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import and_, select
@@ -37,7 +38,8 @@ SAMPLE_TICKETS = (
 def seed_demo(db: Session) -> bool:
     if not get_settings().demo_mode:
         raise RuntimeError("Demo-Daten benötigen DEMO_MODE=true und eine separate Demo-Datenbank")
-    # Never turn existing accounts into privileged demo users or reset their passwords.
+    # Bestehende Konten nie zu Demo-Konten mit Rechten machen oder ihr Passwort
+    # zuruecksetzen - die Befuellung laeuft nur auf einer leeren Datenbank.
     legacy_placeholder = and_(User.email == "seed@smartdesk.local", User.hashed_password == "not-a-real-hash")
     if db.scalar(select(User.id).where(~legacy_placeholder).limit(1)) is not None:
         return False

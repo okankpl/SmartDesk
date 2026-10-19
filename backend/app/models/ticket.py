@@ -67,7 +67,8 @@ class Ticket(Base):
     # ("open" = niemand hat es geclaimt).
     assignee_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
-    # Joined loading avoids one query per name when listing the queue.
+    # lazy="joined": die Namen kommen per JOIN gleich mit der Ticketabfrage, statt
+    # einer zusaetzlichen Abfrage pro Ticket beim Anzeigen der Liste (N+1-Problem).
     requester: Mapped[User] = relationship(foreign_keys=[requester_id], lazy="joined")
     assignee: Mapped[User | None] = relationship(foreign_keys=[assignee_id], lazy="joined")
 

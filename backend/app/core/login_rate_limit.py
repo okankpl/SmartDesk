@@ -1,4 +1,5 @@
-"""Shared login request budgets; rejected requests never reach bcrypt or the DB."""
+"""Gemeinsame Anfrage-Budgets fuer den Login: abgelehnte Anfragen erreichen
+weder bcrypt noch die Datenbank (siehe Architektur-Doku, "Login-Drosselung")."""
 
 from functools import lru_cache
 import hashlib
@@ -26,7 +27,9 @@ class LoginRateLimiter:
         )
 
     def identifier(self, scope: str, value: str) -> str:
-        # Do not put raw email addresses or IPs into Redis keys or its AOF log.
+        # Keine E-Mail-Adressen oder IPs im Klartext in Redis-Schluesseln (und damit
+        # auch nicht in der AOF-Protokolldatei von Redis): HMAC mit dem SECRET_KEY
+        # ergibt pro Wert einen festen, aber nicht zurueckrechenbaren Schluessel.
         payload = f"smartdesk-login-v1\0{scope}\0{value}".encode("utf-8")
         return hmac.new(self.secret, payload, hashlib.sha256).hexdigest()
 

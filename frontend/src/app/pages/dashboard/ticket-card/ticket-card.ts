@@ -73,7 +73,8 @@ export class TicketCard {
   protected readonly isBusy = computed(() => this.isChangingStatus() || this.isAssigning() || !!this.editor()?.busy());
   private hasChanges = false;
 
-  // Confirmed changes refresh the parent queue after the dialog closes.
+  // Bestaetigte Aenderungen laden die Warteschlange im Dashboard erst nach dem
+  // Schliessen des Dialogs neu (siehe onDialogClosed).
   readonly statusChanged = output<void>();
 
   // Beschriftung für das Status-Badge, abgeleitet aus dem aktuellen Ticket-Status.
@@ -230,7 +231,9 @@ export class TicketCard {
     this.isDetailOpen.set(false);
     this.isEditing.set(false);
     this.confirmDiscard.set(false);
-    // Refresh after closing, so a moved ticket cannot destroy its open dialog.
+    // Erst nach dem Schliessen neu laden: faellt ein Ticket durch den
+    // Statuswechsel aus dem aktiven Filter, wuerde sonst seine Karte samt
+    // offenem Dialog aus dem DOM verschwinden.
     if (this.hasChanges) {
       this.hasChanges = false;
       this.statusChanged.emit();

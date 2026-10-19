@@ -62,8 +62,8 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> User:
 
 
 @router.post("/login", response_model=TokenResponse, responses={
-    429: {"description": "Login budget exceeded; Retry-After contains seconds until retry."},
-    503: {"description": "Login protection temporarily unavailable; no authentication performed."},
+    429: {"description": "Login-Budget ausgeschöpft; Retry-After nennt die Sekunden bis zum nächsten Versuch."},
+    503: {"description": "Login-Schutz vorübergehend nicht erreichbar; es findet keine Anmeldung statt."},
 })
 def login(
     request: Request,
@@ -82,7 +82,9 @@ def login(
     # .strip().lower(): gleiche Normalisierung wie bei der Registrierung, damit
     # "Max@Firma.de " denselben Account findet wie "max@firma.de".
     email = form_data.username.strip().lower()
-    # request.client is supplied by the server, not by an application-read header.
+    # request.client setzt der Server (hinter Caddy: Uvicorns Proxy-Auswertung),
+    # nicht ein Header, den die Anwendung selbst ausliest - siehe Architektur-Doku,
+    # "Proxy-Vertrauen".
     rate_limiter.enforce(email, request.client.host if request.client else "unknown")
     user = db.execute(select(User).where(func.lower(User.email) == email)).scalar_one_or_none()
 

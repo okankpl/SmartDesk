@@ -59,7 +59,8 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
         return bcrypt.checkpw(password_bytes, hashed_password.encode("utf-8"))
     except ValueError:
-        # Legacy migration placeholders are not valid hashes or login accounts.
+        # Platzhalter aus einer alten Migration sind keine gueltigen bcrypt-Hashes -
+        # und damit auch keine Konten, mit denen man sich anmelden kann.
         return False
 
 

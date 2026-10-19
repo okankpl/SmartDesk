@@ -8,7 +8,8 @@ from app.core.database import Base
 
 
 class TicketEvent(Base):
-    """Append-only application history, committed together with the ticket change."""
+    """Ein Eintrag der Anwendungshistorie. Wird nur angehaengt, nie geaendert, und
+    im selben Commit wie die zugehoerige Ticketaenderung gespeichert."""
 
     __tablename__ = "ticket_events"
 

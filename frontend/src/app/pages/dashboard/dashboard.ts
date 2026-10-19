@@ -53,7 +53,8 @@ export class Dashboard {
     },
   });
 
-  // Keep the last successful queue visible when a refresh fails.
+  // Schlaegt ein Neuladen fehl, bleibt die zuletzt erfolgreich geladene Liste
+  // sichtbar (hasValue() ist im Fehlerzustand false).
   protected readonly tickets = computed(() => this.ticketsResource.hasValue()
     ? this.ticketsResource.value() : this.lastSuccessfulTickets() ?? []);
   protected readonly isInitialLoading = computed(() => this.ticketsResource.isLoading() && this.lastSuccessfulTickets() === null);
@@ -77,7 +78,8 @@ export class Dashboard {
   ];
   protected readonly activeViewLabel = computed(() => this.viewTabs.find(tab => tab.status === this.activeView())!.label);
 
-  // Counts and the result list share the same filters, independent of the status tab.
+  // Zaehler und Ergebnisliste nutzen dieselben Such- und Filterkriterien,
+  // unabhaengig davon, welcher Status-Tab gerade aktiv ist.
   private readonly filteredTickets = computed(() => {
     const query = this.search().trim().toLocaleLowerCase('de');
     return this.tickets().filter(ticket => {

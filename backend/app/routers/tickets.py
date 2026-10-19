@@ -114,7 +114,8 @@ def update_ticket(
 
     if ticket.status == TicketStatus.CLOSED:
         raise InvalidTransitionError("Geschlossene Tickets können nicht mehr geändert werden")
-    # Compare while holding the row lock, before applying changes or recording history.
+    # Versionsvergleich unter der Zeilensperre, bevor Felder geaendert oder ein
+    # Historieneintrag geschrieben wird.
     if payload.expected_version is not None and payload.expected_version != ticket.version:
         raise InvalidTransitionError("Das Ticket wurde inzwischen geändert. Bitte aktuellen Stand laden.")
     if "assignee_id" in payload.model_fields_set:
@@ -157,8 +158,9 @@ def update_ticket_status(
     # Ticket existiert UND welchen Status es hat (409 "Übergang von
     # 'in_progress' zu ... nicht erlaubt") - ein Informationsleck (IDOR).
     # Jetzt gilt dieselbe Regel wie bei GET /tickets/{id}: fremd = 404.
-    # Lock only the ticket row, not the outer-joined users. Concurrent claims
-    # must evaluate permissions against the state committed by the winner.
+    # Nur die Ticketzeile sperren, nicht die per OUTER JOIN geladenen Nutzer.
+    # Zwei gleichzeitige Uebernahmen pruefen ihre Berechtigung so gegen den
+    # Stand, den der erste Request bereits committet hat.
     ticket = get_visible_ticket_or_404(
         db.scalar(select(Ticket).where(Ticket.id == ticket_id).with_for_update(of=Ticket)), current_user,
     )
