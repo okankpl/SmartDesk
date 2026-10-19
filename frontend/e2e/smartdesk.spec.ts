@@ -158,6 +158,9 @@ test('admin assigns support staff and the change is recorded', async ({ page }, 
     await expect(page.getByRole('dialog').locator('.ticket-detail__meta')).toContainText('Alex Weber');
     await expect(page.locator('app-ticket-history')).toContainText('Ticket geändert');
     await expect(page.locator('app-ticket-history')).toContainText('Samira Kaya');
+    // The history names the new assignee instead of showing "Nutzer #<id>".
+    await expect(page.locator('app-ticket-history')).toContainText('Bearbeiter: — → Alex Weber');
+    await expect(page.locator('app-ticket-history')).not.toContainText('Nutzer #');
   } finally {
     testInfo.setTimeout(testInfo.timeout + 10_000);
     expect((await page.request.delete(`/api/tickets/${ticketId}`)).status()).toBe(204);
