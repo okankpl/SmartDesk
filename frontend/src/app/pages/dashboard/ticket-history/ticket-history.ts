@@ -28,7 +28,7 @@ const LABELS: Record<string, string> = {
               <div class="event-heading"><strong>{{ label(event.kind) }}</strong><time [attr.datetime]="event.created_at">{{ event.created_at | date: 'dd.MM.yyyy, HH:mm' }}</time></div>
               <span>{{ event.actor_name }}</span>
               @for (change of event.changes | keyvalue; track change.key) {
-                <p class="change">{{ label(change.key) }}: {{ value(change.key, change.value.old) }} → {{ value(change.key, change.value.new) }}</p>
+                <p class="change">{{ label(change.key) }}: {{ value(change.key, change.value.old, change.value.old_label) }} → {{ value(change.key, change.value.new, change.value.new_label) }}</p>
               }
             </li>
           } @empty {
@@ -60,8 +60,16 @@ export class TicketHistory {
     defaultValue: [],
   });
   protected label(key: string): string { return LABELS[key] ?? key; }
-  protected value(field: string, value: string | number | null): string {
+
+  // Wandelt einen gespeicherten Wert in Anzeigetext um:
+  // - Bearbeiter: der vom Backend mitgelieferte Name (vorher stand hier immer
+  //   "Nutzer #3"); die ID nur noch als Rueckfall, falls es den Nutzer nicht mehr gibt.
+  // - Status und Prioritaet: feste Schluessel mit deutscher Uebersetzung.
+  // - Titel und Beschreibung: freier Text, unveraendert. Vorher wurde auch er
+  //   uebersetzt - ein Titel "critical" erschien dann als "Kritisch".
+  protected value(field: string, value: string | number | null, label?: string | null): string {
     if (value === null) return '—';
-    return field === 'assignee_id' ? `Nutzer #${value}` : this.label(String(value));
+    if (field === 'assignee_id') return label ?? `Nutzer #${value}`;
+    return field === 'status' || field === 'priority' ? this.label(String(value)) : String(value);
   }
 }

@@ -25,6 +25,30 @@ describe('TicketHistory', () => {
     expect(fixture.nativeElement.querySelector('img')).toBeNull();
   });
 
+  it('shows assignee names instead of user ids and keeps free text untranslated', async () => {
+    const fixture = TestBed.createComponent(TicketHistory);
+    fixture.componentRef.setInput('ticketId', 7);
+    fixture.detectChanges();
+    TestBed.inject(HttpTestingController).expectOne(`${API_URL}/tickets/7/history`).flush([
+      {
+        id: 1, kind: 'status_changed', actor_name: 'Alex Weber', created_at: '2026-10-15T10:00:00Z',
+        changes: { assignee_id: { old: null, new: 3, old_label: null, new_label: 'Alex Weber' } },
+      },
+      {
+        // "critical" ist hier ein frei gewaehlter Titel, kein Prioritaetswert.
+        id: 2, kind: 'updated', actor_name: 'Alex Weber', created_at: '2026-10-15T11:00:00Z',
+        changes: { title: { old: 'Drucker', new: 'critical' } },
+      },
+    ]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('Bearbeiter: — → Alex Weber');
+    expect(text).not.toContain('Nutzer #3');
+    expect(text).toContain('Titel: Drucker → critical');
+    expect(text).not.toContain('Kritisch');
+  });
+
   it('offers retry after a failed load', async () => {
     const fixture = TestBed.createComponent(TicketHistory);
     fixture.componentRef.setInput('ticketId', 7);

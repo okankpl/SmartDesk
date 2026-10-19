@@ -24,10 +24,12 @@ def test_content_edit_is_partial_versioned_and_recorded(client, db):
     events = client.get(f"{path}/history").json()
     assert len(events) == 2
     assert events[-1]["actor_name"] == agent.full_name
+    # old_label/new_label gibt es nur fuer Bearbeiter (Namen); bei Inhaltsfeldern bleiben sie leer.
+    no_labels = {"old_label": None, "new_label": None}
     assert events[-1]["changes"] == {
-        "title": {"old": ticket["title"], "new": "VPN am Standort"},
-        "description": {"old": None, "new": "Weitere Details"},
-        "priority": {"old": "high", "new": "critical"},
+        "title": {"old": ticket["title"], "new": "VPN am Standort", **no_labels},
+        "description": {"old": None, "new": "Weitere Details", **no_labels},
+        "priority": {"old": "high", "new": "critical", **no_labels},
     }
     cleared = client.patch(path, headers=headers(agent), json={
         "description": None, "expected_version": edited["version"],

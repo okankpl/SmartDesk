@@ -78,6 +78,12 @@ def test_complete_lifecycle_and_atomic_history(client, db):
     events = client.get(f"/tickets/{ticket_id}/history").json()
     assert len(events) == 6  # The denied close must not produce an event.
     assert events[1]["changes"]["assignee_id"]["new"] == agent.id
+    # Anzeigename fuer die Oberflaeche, auch fuer die meldende Person (Cookie
+    # des Employees) - vorher stand dort nur die ID ("Nutzer #3").
+    assert events[1]["changes"]["assignee_id"]["new_label"] == "Support Agent"
+    assert events[1]["changes"]["assignee_id"]["old_label"] is None
+    # Status-/Prioritaetswerte uebersetzt erst das Frontend, sie bekommen kein Label.
+    assert events[1]["changes"]["status"]["new_label"] is None
     assert events[0]["actor_name"] == "Lena Fischer"
     assert client.patch(f"/tickets/{ticket_id}", json={"title": "Edited"}, headers=headers(admin)).status_code == 409
 
