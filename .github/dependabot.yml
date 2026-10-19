@@ -5,6 +5,12 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # Welche TypeScript-Hauptversion passt, gibt Angular vor (Angular 22:
+      # TypeScript 6.0). Ein Sprung auf TypeScript 7 liess Tests und Build
+      # scheitern - neue Hauptversionen kommen gemeinsam mit "ng update".
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: pip
     directory: /backend
     schedule:
@@ -22,3 +28,9 @@ updates:
     directory: /frontend
     schedule:
       interval: monthly
+    ignore:
+      # Node-Hauptversionen bewusst gemeinsam mit frontend/.nvmrc und der CI
+      # wechseln, und nur auf LTS-Versionen (gerade Nummern). Sonst schlaegt
+      # Dependabot z.B. Node 25 vor, das nie Langzeit-Support bekommt.
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
