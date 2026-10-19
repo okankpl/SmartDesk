@@ -1,6 +1,6 @@
 # Entscheidungen: Zuständigkeit, Historie und Demo
 
-Stand: 15.10.2026. Diese Entscheidungen ergänzen die [Architekturbeschreibung](architektur-und-konzepte.md).
+Stand: 19.10.2026. Diese Entscheidungen ergänzen die [Architekturbeschreibung](architektur-und-konzepte.md).
 
 ## Zuständigkeit als Fachregel
 
@@ -47,7 +47,7 @@ Ein Kommentarentwurf bleibt beim Wechsel in und aus dem Editor bestehen. Beim Sc
 
 Es gibt drei Ereignistypen: `created`, `updated` und `status_changed`. Kommentare haben ihre eigene Tabelle; sie werden nicht zusätzlich als Änderung dupliziert. Der Verlauf wird über `GET /tickets/{id}/history` gelesen, unter derselben Sichtbarkeitsregel wie das Ticket. Ein JOIN lädt die Namen in einer Abfrage, statt eine Abfrage je Ereignis auszuführen.
 
-Die neue Migration rekonstruiert keine unbekannte Vergangenheit bestehender Tickets. Ein leerer Verlauf ist deshalb zulässig. Autorennamen werden aus dem aktuellen Nutzerprofil gelesen, nicht historisch eingefroren. IDs und Vorher-/Nachher-Werte bilden die gespeicherten Fakten.
+Die neue Migration rekonstruiert keine unbekannte Vergangenheit bestehender Tickets. Ein leerer Verlauf ist deshalb zulässig. Autorennamen werden aus dem aktuellen Nutzerprofil gelesen, nicht historisch eingefroren. IDs und Vorher-/Nachher-Werte bilden die gespeicherten Fakten. Für Bearbeiterwechsel ergänzt die Leseschnittstelle deshalb die aktuellen Namen als `old_label`/`new_label` (eine zusätzliche Abfrage für alle Ereignisse); gespeichert bleiben die IDs.
 
 Die API bietet kein Ändern/Löschen einzelner Ereignisse. Das ist eine Anwendungshistorie, keine manipulationssichere Buchführung: direkte Datenbankzugriffe bleiben möglich, und das Löschen des Tickets entfernt die zugehörigen Ereignisse per Fremdschlüssel-Cascade.
 
@@ -68,4 +68,4 @@ Das Frontend wird im mehrstufigen Docker-Build mit Node gebaut und als fertige D
 - Angular läuft mit strengen TypeScript- und Template-Prüfungen; Komponenten-/Service-Tests prüfen unter anderem Registrierung, Filter und den Historien-Fehlerfall.
 - Playwright prüft Registrierung und den vollständigen Rollenablauf gegen den Container-Stack auf Desktop und Mobile, einschließlich horizontalem Überlauf, Inhaltseditor, Verwerfen von Entwürfen, Versionskonflikten und Fehlern im Browser.
 
-Die Workflows sind im Repository konfiguriert. Ein erfolgreicher lokaler Lauf ist unabhängig vom späteren Status der GitHub-Actions-Läufe.
+Alle Prüfungen laufen bei jedem Push und Pull Request in GitHub Actions; der aktuelle Status steht in den Badges des [Projekt-README](../README.md).

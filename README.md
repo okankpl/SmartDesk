@@ -37,6 +37,11 @@ Die Demo enthält zwölf fiktive Supportfälle in allen vier Status mit Kommenta
 ```bash
 # Demo stoppen, Daten behalten
 docker compose -f docker-compose.demo.yml down
+
+# Demo vollständig zurücksetzen: entfernt die Demo-Volumes, also auch Konten,
+# die Browsertests oder eigene Versuche angelegt haben. Der nächste Start
+# legt die zwölf Beispieltickets neu an.
+docker compose -f docker-compose.demo.yml down -v
 ```
 
 API-Dokumentation in der Demo: [localhost:8080/api/docs](http://localhost:8080/api/docs).
@@ -116,7 +121,7 @@ node --test scripts/check-docs.test.mjs
 node scripts/check-docs.mjs
 ```
 
-GitHub Actions ist für Backendprüfungen mit PostgreSQL, Angular-Tests samt Produktionsbuild, Dokumentationslinks sowie einen frisch gebauten Demo-Stack mit Playwright konfiguriert. TypeScript und Angular-Templates werden im Strict-Modus geprüft. Dependabot ist für npm, Python, Docker und Actions eingerichtet. Ein lokaler Prüferfolg ist kein Beleg für einen bereits gelaufenen GitHub-Workflow.
+GitHub Actions ist für Backendprüfungen mit PostgreSQL, Angular-Tests samt Produktionsbuild, Dokumentationslinks sowie einen frisch gebauten Demo-Stack mit Playwright konfiguriert. TypeScript und Angular-Templates werden im Strict-Modus geprüft. Dependabot ist für npm, Python, Docker und Actions eingerichtet.
 
 ## Lokal entwickeln
 

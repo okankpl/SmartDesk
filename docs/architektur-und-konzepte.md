@@ -4,7 +4,7 @@ Diese Datei erklärt **warum** SmartDesk so gebaut ist, wie es gebaut ist, und d
 
 Die [README.md](../README.md) gibt den schnellen Projekt- und Starteinstieg. Hier geht es um Spezifikation und Architekturentscheidungen. Die [Dokumentationsübersicht](README.md) ordnet die technischen Dokumente ein.
 
-**Abgeglichen am 15.10.2026**, einschließlich Ticketeditor, Anwendungshistorie und Versionsschutz. Aktueller Migrationskopf: `b42e8f19a620`.
+**Abgeglichen am 19.10.2026**, einschließlich Ticketeditor, Anwendungshistorie, Versionsschutz und Login-Drosselung. Aktueller Migrationskopf: `b42e8f19a620`.
 
 **Inhalt:**
 1. [Der große Überblick](#1-der-große-überblick)

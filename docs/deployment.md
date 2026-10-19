@@ -1,10 +1,10 @@
 # SmartDesk – Deployment auf einem eigenen VPS
 
-**Stand: 15.10.2026.** Dies ist eine Betriebsanleitung, kein Nachweis eines bereits erfolgten öffentlichen Deployments. Lokale Codeänderungen sind nicht automatisch auf GitHub oder dem Zielserver vorhanden. Für die lokale Demo und Entwicklung zuerst die [Startanleitung im Projekt-README](../README.md) lesen; die [Dokumentationsübersicht](README.md) ordnet die weiteren Dokumente ein.
+**Stand: 19.10.2026.** Dies ist eine Betriebsanleitung, kein Nachweis eines bereits erfolgten öffentlichen Deployments. Für die lokale Demo und Entwicklung zuerst die [Startanleitung im Projekt-README](../README.md) lesen; die [Dokumentationsübersicht](README.md) ordnet die weiteren Dokumente ein.
 
 Für die lokale Vorführung genügt die [Demo aus dem README](../README.md#demo-starten). Die bekannte Demo-Anmeldung und `docker-compose.demo.yml` gehören nicht auf einen öffentlichen Server. `DEMO_MODE` bleibt in der Produktionsumgebung `false`. Die folgenden Schritte beschreiben ein Deployment mit eigenen Zugangsdaten; noch offene Sicherheits- und Betriebsaufgaben stehen in den [bewussten Einschränkungen](architektur-und-konzepte.md#9-bewusste-einschränkungen--offene-punkte).
 
-Diese Anleitung beschreibt den Weg auf einen eigenen Linux-Server mit Domain und automatischem HTTPS. Die Serverbefehle sind für Bash auf einem unterstützten Ubuntu-System gedacht, nicht für PowerShell auf deinem Windows-Rechner. Firewall, Benutzerrechte und Paketinstallation müssen zur tatsächlich verwendeten Umgebung passen.
+Diese Anleitung beschreibt den Weg auf einen eigenen Linux-Server mit Domain und automatischem HTTPS. Die Serverbefehle sind für Bash auf einem unterstützten Ubuntu-System gedacht, nicht für PowerShell auf einem Windows-Entwicklungsrechner. Firewall, Benutzerrechte und Paketinstallation müssen zur tatsächlich verwendeten Umgebung passen.
 
 ## Architektur
 
@@ -31,7 +31,7 @@ Backend, PostgreSQL und Redis veröffentlichen keine Hostports. Caddy überschre
 
 ## Schritt 1: Server erstellen
 
-Wähle ein von Docker unterstütztes Ubuntu-Release und prüfe Speicherbedarf von Frontendbuild, Containern, Datenbank und Backups unter der geplanten Last. Eine pauschale Mindestgröße ist hier nicht durch einen Lasttest belegt. Hinterlege den eigenen SSH-Public-Key und plane einen administrativen Benutzer mit gezielt verwendeten sudo-Rechten.
+Ein von Docker unterstütztes Ubuntu-Release wählen und den Speicherbedarf von Frontendbuild, Containern, Datenbank und Backups unter der geplanten Last prüfen. Eine pauschale Mindestgröße ist hier nicht durch einen Lasttest belegt. Den eigenen SSH-Public-Key hinterlegen und einen administrativen Benutzer mit gezielt verwendeten sudo-Rechten einplanen.
 
 ## Schritt 2: Erstzugriff & Grundabsicherung
 
@@ -48,11 +48,11 @@ ufw allow 443/tcp
 ufw enable
 ```
 
-Vor Firewalländerungen einen funktionierenden SSH-Zugang absichern. Prüfe zusätzlich die Provider-Firewall. Veröffentlichte Dockerports können UFW-Regeln umgehen; die [offizielle Docker-Anleitung zu Ubuntu](https://docs.docker.com/engine/install/ubuntu/#firewall-limitations) beschreibt diese Einschränkung. Datenbank und Backend werden in der Produktions-Compose-Datei deshalb nicht als Hostports veröffentlicht.
+Vor Firewalländerungen einen funktionierenden SSH-Zugang absichern. Zusätzlich die Provider-Firewall prüfen. Veröffentlichte Dockerports können UFW-Regeln umgehen; die [offizielle Docker-Anleitung zu Ubuntu](https://docs.docker.com/engine/install/ubuntu/#firewall-limitations) beschreibt diese Einschränkung. Datenbank und Backend werden in der Produktions-Compose-Datei deshalb nicht als Hostports veröffentlicht.
 
 ## Schritt 3: Docker installieren
 
-Installiere Docker Engine und das Compose-Plugin nach der [offiziellen Ubuntu-Anleitung über das Paketrepository](https://docs.docker.com/engine/install/ubuntu/#install-using-the-apt-repository). Docker empfiehlt das Convenience-Skript nicht für Produktionsumgebungen. Lade nicht ungeprüft ein externes Skript direkt in eine privilegierte Shell.
+Docker Engine und das Compose-Plugin nach der [offiziellen Ubuntu-Anleitung über das Paketrepository](https://docs.docker.com/engine/install/ubuntu/#install-using-the-apt-repository) installieren. Docker empfiehlt das Convenience-Skript nicht für Produktionsumgebungen; ein externes Skript sollte nie ungeprüft direkt in einer privilegierten Shell laufen.
 
 ```bash
 # Auf dem Zielserver: Installation und Zugriff auf den Docker-Daemon prüfen.
@@ -64,7 +64,7 @@ docker compose version
 
 Bei echter Domain: beim Domain-Registrar (oder DNS-Anbieter) einen **A-Record** anlegen, der auf die Server-IP zeigt. DNS-Änderungen brauchen Zeit, um sich zu verbreiten (Minuten bis Stunden) – vor dem nächsten Schritt mit `dig <domain>` oder `nslookup <domain>` prüfen, ob die IP schon korrekt zurückkommt.
 
-Prüfe auch vorhandene AAAA-Einträge: Eine falsche IPv6-Adresse kann Erreichbarkeit und Zertifikatsprüfung stören. Voraussetzungen und Verhalten der Zertifikatsbeschaffung stehen in [Caddys Dokumentation zu automatischem HTTPS](https://caddyserver.com/docs/automatic-https).
+Auch vorhandene AAAA-Einträge prüfen: Eine falsche IPv6-Adresse kann Erreichbarkeit und Zertifikatsprüfung stören. Voraussetzungen und Verhalten der Zertifikatsbeschaffung stehen in [Caddys Dokumentation zu automatischem HTTPS](https://caddyserver.com/docs/automatic-https).
 
 ## Schritt 5: Projekt auf den Server holen
 
@@ -218,7 +218,7 @@ Das Skript endet mit einem Health-Check gegen `/health/ready` (von innerhalb des
 ```
 Legt eine Datei unter `backups/` an (ist in `.gitignore` – die Datei enthält E-Mail-Adressen und Passwort-Hashes aller Nutzer) und entfernt automatisch Backups, die älter als 7 Tage sind. Für automatische, regelmäßige Backups siehe den Cron-Hinweis am Ende des Skripts.
 
-Wiederherstellen ist destruktiv: Das vom Skript erzeugte SQL enthält Löschanweisungen für vorhandene Objekte. Verwende nur ein geprüftes Backup und teste den Restore zuerst in einer getrennten Umgebung. Ein bloß vorhandenes Backup ist kein belegter Wiederherstellungserfolg.
+Wiederherstellen ist destruktiv: Das vom Skript erzeugte SQL enthält Löschanweisungen für vorhandene Objekte. Nur ein geprüftes Backup verwenden und den Restore zuerst in einer getrennten Umgebung testen. Ein bloß vorhandenes Backup ist kein belegter Wiederherstellungserfolg.
 ```bash
 # Bash auf dem Zielserver, nicht PowerShell: Fiktiven Namen durch die echte Sicherung ersetzen.
 backup_file='backups/smartdesk-YYYYMMDD-HHMMSS.sql'
