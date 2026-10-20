@@ -58,6 +58,7 @@ API-Dokumentation in der Demo: [localhost:8080/api/docs](http://localhost:8080/a
 - **Inhalte bearbeiten:** Support und Administration ändern Titel, Beschreibung und Priorität direkt im Detaildialog. Der Editor schützt vor dem Verwerfen ungespeicherter Änderungen und erkennt veraltete Ticketversionen. Fehlgeschlagene Speicherungen erhalten den Entwurf; erfolgreiche Änderungen erscheinen in der Historie.
 - **Konten:** Registrierung und Anmeldung, bcrypt-Passwörter, JWT im HttpOnly-Cookie, Wiederherstellung und Ablauf einer Sitzung.
 - **Login-Schutz:** gemeinsame Redis-Zähler pro IP und normalisierter E-Mail, auch über mehrere Backend-Prozesse. Bei ausgeschöpftem Budget zeigt die Anmeldung eine Wartezeit; ein Ausfall des Schutzdienstes erlaubt keine unbegrenzten Login-Versuche.
+- **Öffentliche Demo ohne Konto:** „Demo starten“ legt pro Person einen privaten Arbeitsbereich mit Beispieltickets an; ein Knopf wechselt zwischen Mitarbeitenden, Support und Administration, nach 24 Stunden wird alles gelöscht. Die Arbeitsbereiche sind in allen Sichtbarkeitsregeln voneinander getrennt.
 - **Betrieb:** automatisierte Migrationen, getrennte Demo-/Test-/Produktionskonfiguration, Non-root-Backend, Caddy, Readiness-Check und Backup-/Deployment-Skripte.
 
 ![SmartDesk: Ticketdetail mit Kommentaren und Änderungshistorie](docs/images/ticket-detail.png)
@@ -85,6 +86,7 @@ flowchart LR
 | Gemeinsame Transaktion für Ticket und Ereignis | Fehlgeschlagene Aktionen hinterlassen keinen scheinbar erfolgreichen Historieneintrag. |
 | Versionsprüfung bei Inhaltsänderungen | Der Editor sendet die gelesene Ticketversion mit. Ein veralteter Stand wird unter derselben Zeilensperre mit `409` abgewiesen, ohne neuere Inhalte oder die Historie zu überschreiben. |
 | Explizite Demo-Befüllung | Bekannte Demo-Zugangsdaten entstehen nur bei `DEMO_MODE=true`, getrennt von der produktiven Konfiguration. |
+| Private Demo-Arbeitsbereiche statt gemeinsamer Konten | Öffentlich würden sich Besucher sonst Tickets und Eingaben teilen. Jeder Bereich ist ein eigener Mandant; jede Sichtbarkeitsregel prüft ihn, fremde Bereiche antworten mit `404`. |
 | Login-Drosselung mit `limits` und Redis | Atomare Moving-Window-Zähler gelten pro IP und E-Mail unabhängig vom Backend-Prozess. Keine Klartext-E-Mails/IPs in Redis-Schlüsseln; keine dauerhafte Kontosperre. |
 | Bedarfsgesteuertes Frontend | Seiten werden als eigene Route-Chunks geladen. Filter, Kennzahlen und Ticketvorschau sind eigenständige Präsentationskomponenten; der Detaildialog lädt Kommentare und Historie erst beim Öffnen. |
 

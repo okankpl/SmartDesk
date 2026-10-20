@@ -4,7 +4,7 @@ Diese Datei erklärt **warum** SmartDesk so gebaut ist, wie es gebaut ist, und d
 
 Die [README.md](../README.md) gibt den schnellen Projekt- und Starteinstieg. Hier geht es um Spezifikation und Architekturentscheidungen. Die [Dokumentationsübersicht](README.md) ordnet die technischen Dokumente ein.
 
-**Abgeglichen am 19.10.2026**, einschließlich Ticketeditor, Anwendungshistorie, Versionsschutz und Login-Drosselung. Aktueller Migrationskopf: `b42e8f19a620`.
+**Abgeglichen am 20.10.2026**, einschließlich Ticketeditor, Anwendungshistorie, Versionsschutz, Login-Drosselung und privater Demo-Arbeitsbereiche. Aktueller Migrationskopf: `ccca87eb18e9`.
 
 **Inhalt:**
 1. [Der große Überblick](#1-der-große-überblick)
@@ -75,7 +75,7 @@ Funktionale Anforderungen beschreiben **konkretes Verhalten** des Systems ("das 
 | FA-11 | Änderungen müssen handelnder Person und Zeitpunkt zugeordnet werden können | ✅ Transaktionale Ereignisse in `ticket_events`, `GET /tickets/{id}/history` |
 | FA-12 | Registrierung und Ticketsuche müssen ohne API-Werkzeuge nutzbar sein | ✅ `/register`, Suchfeld und kombinierbare Filter im Dashboard |
 | FA-13 | Support/Admin können Inhalte in der Oberfläche bearbeiten, ohne neuere Änderungen unbemerkt zu überschreiben | ✅ `TicketEditor`, `expected_version` und Konfliktbehandlung |
-| FA-14 | Besucher einer öffentlichen Demo erhalten einen eigenen Arbeitsbereich; Daten anderer Besucher sind für sie weder sichtbar noch änderbar | 🔶 Arbeitsbereiche, Sitzungen, Rollenwechsel und Aufräumen umgesetzt (`routers/demo.py`); Trennung in den Sichtbarkeitsregeln offen |
+| FA-14 | Besucher einer öffentlichen Demo erhalten einen eigenen Arbeitsbereich; Daten anderer Besucher sind für sie weder sichtbar noch änderbar | ✅ `routers/demo.py` (Anlegen, Rollenwechsel, Ablauf); Trennung in allen Sichtbarkeitsregeln (`workspace_scope.py`, `ticket_access.py`, `user_access.py`), Isolations-Tests |
 
 Diese Tabelle ist zugleich ein kleines Beispiel für Requirements-Tracing: jede Zeile lässt sich auf einen Commit oder eine Datei zurückführen – das ist genau das Prinzip, das professionelle RE-Werkzeuge (z.B. Jira, Azure DevOps mit verlinkten Work Items) automatisieren.
 
@@ -184,7 +184,8 @@ Model (app/models/)        → beschreibt die Datenbank-Tabelle (SQLAlchemy)
 Service (app/services/)    → Geschäftslogik, die mehr ist als simples Lesen/Schreiben
                               (z.B. app/services/ticket_lifecycle.py: prüft Status-Übergänge
                               gegen Rollenregeln, bevor der Router überhaupt committet;
-                              app/services/ticket_access.py: wer welches Ticket sehen darf)
+                              app/services/ticket_access.py, user_access.py: wer welches
+                              Ticket bzw. welche Person sehen darf)
 ```
 
 Die Bereiche haben unterschiedliche Aufgaben: Router kennen HTTP, führen SQLAlchemy-Abfragen aus und besitzen die Transaktionen. Schemas validieren Datenformen; Modelle beschreiben die Persistenz; Services bündeln Fachregeln. Eine zusätzliche Repository-Schicht ist im aktuellen Projekt nicht vorhanden.
@@ -229,6 +230,7 @@ classDiagram
         +str hashed_password
         +str full_name
         +UserRole role
+        +int workspace_id
         +datetime created_at
     }
     class Ticket {
@@ -240,6 +242,7 @@ classDiagram
         +TicketPriority priority
         +int requester_id
         +int assignee_id
+        +int workspace_id
         +datetime created_at
         +datetime updated_at
         +datetime resolved_at
@@ -259,6 +262,11 @@ classDiagram
         +str kind
         +jsonb changes
         +datetime created_at
+    }
+    class DemoWorkspace {
+        +int id
+        +datetime created_at
+        +datetime expires_at
     }
     class UserRole {
         <<enumeration>>
@@ -287,6 +295,8 @@ classDiagram
     Comment "0..*" --> "1" User : author_id
     TicketEvent "0..*" --> "1" Ticket : ticket_id
     TicketEvent "0..*" --> "1" User : actor_id
+    User "0..*" --> "0..1" DemoWorkspace : workspace_id
+    Ticket "0..*" --> "0..1" DemoWorkspace : workspace_id
     User --> UserRole
     Ticket --> TicketStatus
     Ticket --> TicketPriority
@@ -361,7 +371,7 @@ Eine öffentlich erreichbare Demo mit gemeinsamen Konten hätte ein offensichtli
 - **Anmeldung ohne Passwort:** Demo-Konten haben bewusst keinen gültigen Passwort-Hash. Der Start meldet als Mitarbeitende an, `POST /demo/sessions/role` wechselt innerhalb des **eigenen** Bereichs die Rolle; welches Konto es wird, bestimmt der Server, nie der Client. Der Token gilt bis zum Ende des Bereichs statt der üblichen 60 Minuten.
 - **Lebensdauer:** standardmäßig 24 Stunden. `get_current_user` lehnt Konten abgelaufener Bereiche sofort ab; gelöscht wird beim nächsten Start einer Demo. Die Löschung läuft in fester Reihenfolge (Tickets mit Kommentaren und Historie, dann Konten, dann der Bereich): ein einziges kaskadierendes `DELETE` auf `demo_workspaces` scheiterte in einem Integrationstest an `comments_author_id_fkey`, weil PostgreSQL ein Konto entfernen wollte, auf das noch ein Kommentar verwies.
 - **Missbrauchsschutz:** ein Budget pro IP-Adresse für neue Bereiche (derselbe Redis-Speicher wie die Login-Drosselung), eine Obergrenze gleichzeitig aktiver Bereiche (`503`, wenn erreicht) und `REGISTRATION_ENABLED=false` auf dem Demo-Server. Inhalte bleiben auf die bestehenden Längengrenzen beschränkt und werden als Text dargestellt.
-- **Trennung der Bereiche (FA-14):** Alle Sichtbarkeitsregeln müssen zusätzlich „gleicher Arbeitsbereich“ verlangen – Ticketliste und Einzelticket (`ticket_access.py`) samt allen Endpunkten, die Tickets laden, die Nutzerliste und die Bearbeiterzuweisung. Dieser Teil ist noch in Umsetzung (siehe Abschnitt 9); vorher darf die Demo nicht öffentlich betrieben werden.
+- **Trennung der Bereiche (FA-14):** Jede Sichtbarkeitsregel verlangt zusätzlich „gleicher Arbeitsbereich“ – für alle Rollen, auch für Admins. Normale Daten (`workspace_id = NULL`) bilden dabei einen eigenen Bereich: Normale Konten sehen keine Demo-Daten und umgekehrt, sodass Besuchereingaben auch für Betreiberkonten privat bleiben; aufgeräumt wird ohnehin automatisch. Die Bedingung steht an einer Stelle ([workspace_scope.py](../backend/app/services/workspace_scope.py)): für normale Daten `IS NULL`, sonst `= <id>`. Ein schlichtes `workspace_id = :id` hätte normalen Konten alle normalen Tickets versteckt, weil `NULL = NULL` in SQL nicht wahr ist; `IS NOT DISTINCT FROM` wäre korrekt, kann in PostgreSQL aber den Index nicht nutzen. Angewendet wird sie in der Ticketliste und der Einzelprüfung ([ticket_access.py](../backend/app/services/ticket_access.py)) sowie in der Nutzerliste und der Bearbeitersuche ([user_access.py](../backend/app/services/user_access.py)); `validate_assignment` prüft als zweite Schutzlinie, dass Bearbeiter und Ticket zum selben Bereich gehören. Tickets und Personen fremder Bereiche ergeben `404` wie unbekannte IDs. Beim Einbau zeigte sich, dass `PATCH` und `DELETE` Tickets bisher ohne Sichtbarkeitsprüfung luden – ohne Arbeitsbereiche war das für Agents und Admins gleichwertig, mit ihnen wäre es eine Lücke gewesen. [test_workspace_isolation.py](../backend/tests/integration/test_workspace_isolation.py) prüft jeden ticketladenden Endpunkt, die Nutzerliste, die Zuweisung und die Trennung von normalen und Demo-Daten; ein Browsertest lässt zwei Besucher parallel arbeiten.
 
 ### Login-Drosselung
 
@@ -431,7 +441,7 @@ Für Rollenprüfungen wird die aktuelle Rolle dieses geladenen Nutzers verwendet
 - **Ja/Nein-Berechtigung** (darf diese Rolle das überhaupt?) → `Depends(require_roles(...))` in `deps.py`, z.B. `DELETE /tickets/{id}` nur für `ADMIN`, `PATCH /tickets/{id}` nur für `AGENT`/`ADMIN`.
 - **Sichtbarkeits-/Objekt-Filterung** (welche Teilmenge darf diese Rolle sehen?) → z.B. `GET /tickets` liefert `EMPLOYEE` nur die eigenen Tickets, `GET /tickets/{id}` gibt bei fremdem Ticket bewusst `404` statt `403` zurück (verhindert, dass sich die Existenz eines fremden Tickets überhaupt erkennen lässt – siehe **Object-Level Authorization** / IDOR-Vermeidung).
 
-Die gemeinsame Objektprüfung `get_visible_ticket_or_404` in [ticket_access.py](../backend/app/services/ticket_access.py) wird bei Ticketdetail, Statusänderung, beiden Kommentar-Endpunkten und Historie verwendet. Die Listenregel liegt daneben in `visible_tickets_query`: Mitarbeitende werden bereits per SQL auf eigene Tickets eingeschränkt. Der generische PATCH und DELETE verwenden zusätzlich ihre eigenen rollenbeschränkten Zugriffspfade.
+Die gemeinsame Objektprüfung `get_visible_ticket_or_404` in [ticket_access.py](../backend/app/services/ticket_access.py) wird bei Ticketdetail, Statusänderung, Bearbeiten, Löschen, beiden Kommentar-Endpunkten und Historie verwendet. Die Listenregel liegt daneben in `visible_tickets_query`: Alle Rollen werden per SQL auf den eigenen Arbeitsbereich, Mitarbeitende zusätzlich auf eigene Tickets eingeschränkt. Bearbeiten (`PATCH`) und Löschen luden Tickets früher direkt per ID; das war nur so lange gleichwertig, wie Agents und Admins ohnehin alle Tickets sehen durften (siehe [Öffentliche Demo](#öffentliche-demo-private-arbeitsbereiche)).
 
 Für Status-Übergänge läuft die Rollenprüfung weiterhin separat in `ticket_lifecycle.py` (siehe Abschnitt 5), weil sie vom *aktuellen Status* abhängt, nicht nur von der Rolle allein.
 
@@ -545,7 +555,6 @@ Ehrlich zu benennen, was fehlt, ist selbst ein Qualitätsmerkmal. Hier die aktue
 | ~~CORS/Cookie-Flags/Frontend-`API_URL` fest auf `localhost`~~ | – | erledigt: `FRONTEND_ORIGIN`/`COOKIE_SECURE` als Backend-Settings, Angular-`environment.ts`/`environment.prod.ts` – siehe [Deployment-Anleitung](deployment.md) |
 | Kommentieren ist auch bei geschlossenen Tickets möglich | Fachlich noch nicht entschieden – in vielen ITSM-Tools ist ein geschlossenes Ticket schreibgeschützt | Prüfung in `create_comment` (z.B. `409 Conflict` bei `CLOSED`) plus ausgeblendetes Formular im Frontend |
 | Neue Kommentare anderer erscheinen erst beim erneuten Öffnen des Popups | Für den aktuellen Umfang ausreichend, jede Echtzeit-Lösung bringt eigene Infrastruktur mit | periodisches Nachladen (Polling) oder serverseitige Push-Mechanismen (Server-Sent Events, WebSockets) |
-| Öffentliche Demo: Arbeitsbereiche sind in den Sichtbarkeitsregeln noch nicht voneinander getrennt | Anlegen und Bedienen der Bereiche ist umgesetzt, die Regel „gleicher Arbeitsbereich“ folgt als eigener Schritt | Bedingung in `ticket_access.py`, allen ticketladenden Endpunkten, `/users` und der Zuweisung, mit Isolations-Tests; bis dahin `PUBLIC_DEMO` nicht öffentlich einschalten |
 | Historie ist kein revisionssicheres Archiv | API nur lesbar, aber Datenbankzugriffe und Cascade-Löschung eines Tickets bleiben möglich | Bei entsprechender Anforderung separates unveränderliches Archiv und Aufbewahrungsregeln |
 | `requirements.txt` pinnt nur Untergrenzen (`fastapi>=0.115`), keine exakten Versionen | Beim Projektstart bewusst einfach gehalten | für reproduzierbare Installationen exakte Versionen pinnen (`==`) oder ein Lockfile-Tool wie `pip-compile`/`uv` einsetzen – ein frischer `pip install` kann sonst Monate später eine deutlich neuere, potenziell inkompatible Version ziehen (bei einer lokalen Testinstallation im August 2026 beobachtet: FastAPI 0.141 statt der beim Projektstart verwendeten Version) |
 
@@ -569,5 +578,6 @@ Ehrlich zu benennen, was fehlt, ist selbst ein Qualitätsmerkmal. Hier die aktue
 14. ~~Ticket-Inhalte über die Oberfläche bearbeiten~~ – erledigt: Editor mit Validierung, Versionsschutz, Entwurfsbestätigung und Tests
 15. Serverseitige Suche und Pagination
 16. Öffentliches HTTPS-Deployment mit eigener Konfiguration, Betrieb und Überwachung
+17. ~~Öffentliche Demo ohne gemeinsame Konten~~ – erledigt: privater Arbeitsbereich pro Besucher mit Rollenwechsel, Begrenzung, Ablauf und Mandantentrennung in allen Sichtbarkeitsregeln; das Veröffentlichen selbst ist Punkt 16
 
 Ausführlicher Phasenplan: siehe die Commit-Historie (`git log`) – jeder Phasen-Commit beschreibt, was dazukam und warum.

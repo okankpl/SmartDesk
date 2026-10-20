@@ -31,8 +31,8 @@ npm run test:e2e
 
 | Pfad | Aufgabe |
 | --- | --- |
-| [src/app/core](src/app/core) | Authentifizierung, HTTP-Services und gemeinsame Datentypen |
-| [src/app/layout](src/app/layout) | Navigation und gemeinsamer Seitenrahmen |
+| [src/app/core](src/app/core) | Authentifizierung, Demo-Konfiguration, HTTP-Services und gemeinsame Datentypen |
+| [src/app/layout](src/app/layout) | Navigation, gemeinsamer Seitenrahmen und Demo-Leiste mit Rollenwechsel |
 | [src/app/pages](src/app/pages) | Anmeldung, Registrierung, Ticketerstellung und Dashboard |
 | [src/app/pages/dashboard](src/app/pages/dashboard) | Warteschlange, Detaildialog, Editor, Kommentare und Historie |
 | [e2e](e2e) | Playwright-Abläufe für Desktop und Mobile |

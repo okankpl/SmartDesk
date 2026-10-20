@@ -1,6 +1,6 @@
 # Entscheidungen: Zuständigkeit, Historie und Demo
 
-Stand: 19.10.2026. Diese Entscheidungen ergänzen die [Architekturbeschreibung](architektur-und-konzepte.md).
+Stand: 20.10.2026. Diese Entscheidungen ergänzen die [Architekturbeschreibung](architektur-und-konzepte.md).
 
 ## Zuständigkeit als Fachregel
 
@@ -57,7 +57,24 @@ Die API bietet kein Ändern/Löschen einzelner Ereignisse. Das ist eine Anwendun
 
 Der einmalige `setup`-Dienst wartet auf PostgreSQL, führt Migrationen aus und startet dann `python -m app.seed_demo`. Der Seeder verlangt `DEMO_MODE=true`, akzeptiert nur eine leere Datenbank beziehungsweise den unveränderten historischen Migrations-Platzhalter und überschreibt keine bestehenden Konten oder Tickets. Die produktive Konfiguration aktiviert den Seeder nicht.
 
+Für eine öffentlich erreichbare Instanz gibt es keine bekannten Konten: `PUBLIC_DEMO=true` bietet stattdessen „Demo starten“ an (siehe nächster Abschnitt), `DEMO_MODE` bleibt `false`. Lokal sind beide Wege aktiv.
+
 Das Frontend wird im mehrstufigen Docker-Build mit Node gebaut und als fertige Dateien durch Caddy ausgeliefert. Es verwendet denselben `/api`-Reverse-Proxy und dieselben Header wie die Produktionskonfiguration. Node, npm und Entwicklungsserver laufen nicht im fertigen Frontend-Container.
+
+## Öffentliche Demo: ein Arbeitsbereich pro Besucher
+
+Eine öffentliche Demo mit gemeinsamen Konten würde jede Eingabe allen anderen Besuchern zeigen, und Besucher würden sich gegenseitig Tickets schließen. Ein regelmäßiges Zurücksetzen löst nur das zweite Problem. Deshalb erhält jede Person per „Demo starten“ einen eigenen Arbeitsbereich mit drei Konten und den zwölf Beispieltickets – fachlich ein eigener Mandant.
+
+| Frage | Entscheidung | Grund |
+| --- | --- | --- |
+| Anmeldung | Ohne Passwort; Rollenwechsel nur innerhalb des eigenen Bereichs, das Zielkonto wählt der Server | Alle drei Konten gehören derselben Person; sie soll alle Rollen ausprobieren können |
+| Antwort auf fremde Bereiche | `404` wie bei unbekannten IDs | Fremde Arbeitsbereiche sollen nicht einmal als existent erkennbar sein (wie bei fremden Tickets eines Employees) |
+| Normale Konten und Demo-Daten | Strikt getrennt in beide Richtungen | Besuchereingaben bleiben auch gegenüber Betreiberkonten privat; abgelaufene Bereiche werden ohnehin automatisch gelöscht |
+| Lebensdauer | 24 Stunden, Token bis zum Ablauf des Bereichs | Lang genug zum Ausprobieren, kurz genug, damit sich keine Daten ansammeln |
+| Aufräumen | Beim nächsten Start einer Demo, in fester Reihenfolge | Kein eigener Hintergrundjob nötig; abgelaufene Konten sind sofort gesperrt |
+| Missbrauch | IP-Budget, Obergrenze aktiver Bereiche, keine Registrierung auf dem Demo-Server | Jeder Start schreibt rund 60 Zeilen; ohne Grenze ließe sich die Datenbank füllen |
+
+Alle Regeln aus der Rollenmatrix oben gelten unverändert – jeweils innerhalb eines Arbeitsbereichs.
 
 ## Nachweise
 
@@ -67,5 +84,6 @@ Das Frontend wird im mehrstufigen Docker-Build mit Node gebaut und als fertige D
 - `alembic upgrade head` und `alembic check` prüfen Aufbau und Modelldrift.
 - Angular läuft mit strengen TypeScript- und Template-Prüfungen; Komponenten-/Service-Tests prüfen unter anderem Registrierung, Filter und den Historien-Fehlerfall.
 - Playwright prüft Registrierung und den vollständigen Rollenablauf gegen den Container-Stack auf Desktop und Mobile, einschließlich horizontalem Überlauf, Inhaltseditor, Verwerfen von Entwürfen, Versionskonflikten und Fehlern im Browser.
+- Isolations-Tests prüfen jeden ticketladenden Endpunkt, Nutzerliste, Zuweisung und die Trennung normaler und Demo-Daten; ein Browsertest lässt zwei Besucher in getrennten Browser-Sitzungen parallel arbeiten.
 
 Alle Prüfungen laufen bei jedem Push und Pull Request in GitHub Actions; der aktuelle Status steht in den Badges des [Projekt-README](../README.md).

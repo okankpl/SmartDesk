@@ -25,7 +25,7 @@ Die Regeln stehen in [.gitignore](../.gitignore). Sie verhindern das normale Hin
 
 ## Gültigkeit
 
-Abgeglichen am **19.10.2026**, einschließlich Ticketeditor, Migration `b42e8f19a620`, Redis-gestützter Login-Drosselung und Bearbeiternamen im Änderungsverlauf. Es ist keine serverseitige Suche/Pagination und kein Passwort-Reset implementiert. Ein öffentliches Deployment wird nicht vorausgesetzt.
+Abgeglichen am **20.10.2026**, einschließlich Ticketeditor, Migration `ccca87eb18e9`, Redis-gestützter Login-Drosselung, Bearbeiternamen im Änderungsverlauf und privater Demo-Arbeitsbereiche. Es ist keine serverseitige Suche/Pagination und kein Passwort-Reset implementiert. Ein öffentliches Deployment wird nicht vorausgesetzt.
 
 Die Textbeispiele bilden den Projektstand dieses Datums ab. Konkrete Frameworkabhängigkeiten stehen in den Paketdateien; Quellcode und Tests müssen bei späteren Änderungen erneut mit den Erklärungen abgeglichen werden.
 

@@ -1,6 +1,6 @@
 # SmartDesk – Deployment auf einem eigenen VPS
 
-**Stand: 19.10.2026.** Dies ist eine Betriebsanleitung, kein Nachweis eines bereits erfolgten öffentlichen Deployments. Für die lokale Demo und Entwicklung zuerst die [Startanleitung im Projekt-README](../README.md) lesen; die [Dokumentationsübersicht](README.md) ordnet die weiteren Dokumente ein.
+**Stand: 20.10.2026.** Dies ist eine Betriebsanleitung, kein Nachweis eines bereits erfolgten öffentlichen Deployments. Für die lokale Demo und Entwicklung zuerst die [Startanleitung im Projekt-README](../README.md) lesen; die [Dokumentationsübersicht](README.md) ordnet die weiteren Dokumente ein.
 
 Für die lokale Vorführung genügt die [Demo aus dem README](../README.md#demo-starten). Die bekannte Demo-Anmeldung und `docker-compose.demo.yml` gehören nicht auf einen öffentlichen Server. `DEMO_MODE` bleibt in der Produktionsumgebung `false`. Die folgenden Schritte beschreiben ein Deployment mit eigenen Zugangsdaten; noch offene Sicherheits- und Betriebsaufgaben stehen in den [bewussten Einschränkungen](architektur-und-konzepte.md#9-bewusste-einschränkungen--offene-punkte).
 
@@ -218,6 +218,7 @@ Unter Windows/PowerShell statt `DOMAIN=localhost ...` vorher `$env:DOMAIN = "loc
 | Zertifikat wird nicht ausgestellt / Caddy-Logs zeigen Timeout | DNS zeigt noch nicht (richtig) auf die Server-IP, oder Port 80/443 ist irgendwo blockiert (Cloud-Firewall vs. `ufw` – beide prüfen) |
 | `502 Bad Gateway` von Caddy | Backend-Container läuft nicht/ist noch am Starten - `docker compose -f docker-compose.prod.yml ps` und `logs backend` prüfen |
 | `/api/health` sagt `ok`, aber `/api/health/ready` gibt `503` | Antwortdetail prüfen: PostgreSQL oder Redis ist nicht erreichbar. Datenbank-Zugangsdaten beziehungsweise `LOGIN_RATE_LIMIT_STORAGE_URI` und Redis-Logs prüfen. Eine geänderte `.env` ändert kein Passwort in einem bestehenden PostgreSQL-Volume. |
+| „Demo starten“ liefert `429` oder `503` | `429`: zu viele neue Demos von dieser IP (`DEMO_SESSION_IP_*`); `503`: Obergrenze aktiver Bereiche erreicht (`DEMO_MAX_ACTIVE_WORKSPACES`) oder Redis nicht erreichbar – Antwortdetail und Backend-Logs prüfen |
 | Login liefert `429` | `Retry-After` beachten; Grenzwerte, gemeinsam verwendete Konten und Firmen-NAT prüfen. Keine Redis-Volumes als reguläre Entsperrung löschen. |
 | Login liefert `503`, Redis-Ping funktioniert | Redis-Schreibfehler, Speicherlimit und Logs prüfen. Es gibt absichtlich keinen unbegrenzten In-Memory-Fallback. |
 | Backend startet nicht, Log zeigt `SECRET_KEY ist der Platzhalter ...` | `SECRET_KEY` in `.env` ist noch der Beispielwert oder zu kurz – neuen Wert erzeugen (siehe Schritt 6), danach `docker compose -f docker-compose.prod.yml up -d backend` |
