@@ -30,7 +30,7 @@ Anschließend **[localhost:8080](http://localhost:8080)** öffnen. Der erste Bui
 
 **Passwort für alle drei Demo-Konten:** `SmartDesk-Demo26!`
 
-Die Demo enthält zwölf fiktive Supportfälle in allen vier Status mit Kommentaren und Historie. Die bekannte Anmeldung gilt ausschließlich für diesen lokal gebundenen Demo-Stack. Er nutzt ein eigenes Volume und verändert die Entwicklungsdatenbank nicht. Ein erneuter Start erhält die Daten; die Befüllung überschreibt keine bestehenden Konten.
+Die Demo enthält zwölf fiktive Supportfälle in allen vier Status mit Kommentaren und Historie. Zusätzlich bietet die Anmeldeseite **Demo starten**: ein eigener Arbeitsbereich ohne Konto mit Rollenwechsel, so wie ihn eine öffentliche Demo-Instanz verwendet (siehe [Architektur](docs/architektur-und-konzepte.md#öffentliche-demo-private-arbeitsbereiche)). Die bekannte Anmeldung gilt ausschließlich für diesen lokal gebundenen Demo-Stack. Er nutzt ein eigenes Volume und verändert die Entwicklungsdatenbank nicht. Ein erneuter Start erhält die Daten; die Befüllung überschreibt keine bestehenden Konten.
 
 **Kurzer Rundgang:** Als Support ein offenes Ticket übernehmen und unter „In Bearbeitung“ lösen. Als Mitarbeitende kann die Lösung abgelehnt werden; als Admin lässt sie sich final schließen. Im Detaildialog sind Autorennamen, Bearbeiter und der Änderungsverlauf sichtbar.
 
