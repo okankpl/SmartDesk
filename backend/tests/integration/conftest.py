@@ -9,6 +9,7 @@ from limits.storage import MemoryStorage
 
 from app.core.config import get_settings
 from app.core.database import get_db
+from app.core.demo_rate_limit import DemoSessionLimiter, get_demo_session_limiter
 from app.core.login_rate_limit import LoginRateLimiter, get_login_rate_limiter
 from app.main import app
 
@@ -51,3 +52,20 @@ def client(db):
     finally:
         app.dependency_overrides.pop(get_db, None)
         app.dependency_overrides.pop(get_login_rate_limiter, None)
+
+
+@pytest.fixture
+def public_demo(client, monkeypatch):
+    """Schaltet die oeffentliche Demo fuer einen Test ein und ersetzt die
+    Redis-Begrenzung durch einen Zaehler im Speicher (wie die Login-Tests).
+    Gibt eine Funktion zurueck, mit der ein Test die Begrenzung enger stellen kann."""
+    settings = get_settings()
+    monkeypatch.setattr(settings, "public_demo", True)
+
+    def use_limiter():
+        limiter = DemoSessionLimiter(settings, MemoryStorage())
+        app.dependency_overrides[get_demo_session_limiter] = lambda: limiter
+
+    use_limiter()
+    yield use_limiter
+    app.dependency_overrides.pop(get_demo_session_limiter, None)

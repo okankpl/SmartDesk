@@ -11,6 +11,7 @@ from app.services.ticket_access import get_visible_ticket_or_404, visible_ticket
 from app.services.ticket_lifecycle import apply_status_transition, get_allowed_next_statuses
 from app.services.ticket_assignment import validate_assignment
 from app.services.ticket_history import record_event
+from app.services.user_access import get_visible_user
 from app.services.errors import InvalidTransitionError
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
@@ -110,9 +111,13 @@ def update_ticket(
     # Endpunkt ein (Ablehnen einer Loesung, siehe ticket_lifecycle.py).
     current_user: User = Depends(require_roles(UserRole.AGENT, UserRole.ADMIN)),
 ) -> TicketRead:
-    ticket = db.scalar(select(Ticket).where(Ticket.id == ticket_id).with_for_update(of=Ticket))
-    if ticket is None:
-        raise HTTPException(status_code=404, detail="Ticket nicht gefunden")
+    # Auch hier die Sichtbarkeitsregel, obwohl Agents/Admins in ihrem Bereich
+    # alle Tickets sehen: vorher lud dieser Endpunkt jedes Ticket per ID - ein
+    # Demo-Admin haette so Tickets eines FREMDEN Arbeitsbereichs aendern koennen
+    # (gefunden durch test_workspace_isolation.py).
+    ticket = get_visible_ticket_or_404(
+        db.scalar(select(Ticket).where(Ticket.id == ticket_id).with_for_update(of=Ticket)), current_user,
+    )
 
     if ticket.status == TicketStatus.CLOSED:
         raise InvalidTransitionError("Geschlossene Tickets können nicht mehr geändert werden")
@@ -121,7 +126,9 @@ def update_ticket(
     if payload.expected_version is not None and payload.expected_version != ticket.version:
         raise InvalidTransitionError("Das Ticket wurde inzwischen geändert. Bitte aktuellen Stand laden.")
     if "assignee_id" in payload.model_fields_set:
-        assignee = db.get(User, payload.assignee_id) if payload.assignee_id is not None else None
+        # get_visible_user: Personen aus einem anderen Arbeitsbereich gibt es fuer
+        # current_user nicht - dieselbe 404 wie fuer eine unbekannte ID.
+        assignee = get_visible_user(db, payload.assignee_id, current_user) if payload.assignee_id is not None else None
         if payload.assignee_id is not None and assignee is None:
             raise HTTPException(status_code=404, detail="Bearbeiter nicht gefunden")
         validate_assignment(ticket, assignee, current_user)
@@ -190,8 +197,8 @@ def delete_ticket(
     # Status-Wechsel zu CLOSED) - deshalb bewusst nur ADMIN, nicht auch AGENT.
     current_user: User = Depends(require_roles(UserRole.ADMIN)),
 ) -> None:
-    ticket = db.get(Ticket, ticket_id)
-    if ticket is None:
-        raise HTTPException(status_code=404, detail="Ticket nicht gefunden")
+    # Wie bei update_ticket: nur Tickets, die current_user sehen darf - sonst
+    # koennte ein Demo-Admin Tickets eines fremden Arbeitsbereichs loeschen.
+    ticket = get_visible_ticket_or_404(db.get(Ticket, ticket_id), current_user)
     db.delete(ticket)
     db.commit()

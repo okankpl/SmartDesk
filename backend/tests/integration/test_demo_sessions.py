@@ -7,36 +7,15 @@ und Bedienen eines einzelnen Bereichs.
 from datetime import datetime, timedelta, timezone
 
 import jwt
-import pytest
-from limits.storage import MemoryStorage
 from sqlalchemy import func, select
 
 from app.core.config import get_settings
-from app.core.demo_rate_limit import DemoSessionLimiter, get_demo_session_limiter
 from app.core.security import ACCESS_TOKEN_COOKIE_NAME
-from app.main import app
 from app.models.comment import Comment
 from app.models.demo_workspace import DemoWorkspace
 from app.models.ticket import Ticket
 from app.models.ticket_event import TicketEvent
 from app.models.user import User
-
-
-@pytest.fixture
-def public_demo(client, monkeypatch):
-    """Schaltet die oeffentliche Demo fuer einen Test ein und ersetzt die
-    Redis-Begrenzung durch einen Zaehler im Speicher (wie die Login-Tests).
-    Gibt eine Funktion zurueck, mit der ein Test die Begrenzung enger stellen kann."""
-    settings = get_settings()
-    monkeypatch.setattr(settings, "public_demo", True)
-
-    def use_limiter():
-        limiter = DemoSessionLimiter(settings, MemoryStorage())
-        app.dependency_overrides[get_demo_session_limiter] = lambda: limiter
-
-    use_limiter()
-    yield use_limiter
-    app.dependency_overrides.pop(get_demo_session_limiter, None)
 
 
 def start(client):

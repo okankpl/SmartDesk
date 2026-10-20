@@ -359,3 +359,30 @@ test('public demo starts a private workspace and switches roles without a passwo
   await bar.getByRole('button', { name: 'Administration' }).click();
   await expect(page.locator('.user-name')).toContainText('Samira Kaya');
 });
+
+test('two visitors of the public demo never see each other\'s tickets', async ({ page, browser }) => {
+  // Visitor A starts a demo and creates a ticket with a unique title.
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Demo starten' }).click();
+  await page.waitForURL('**/dashboard');
+  const title = `Nur für Besucher A ${Date.now()}`;
+  expect((await page.request.post('/api/tickets', { data: { title, priority: 'high' } })).status()).toBe(201);
+
+  // Visitor B uses a separate browser context: own cookies, own workspace.
+  const otherVisitor = await browser.newContext();
+  try {
+    const other = await otherVisitor.newPage();
+    await other.goto('/login');
+    await other.getByRole('button', { name: 'Demo starten' }).click();
+    await other.waitForURL('**/dashboard');
+    await other.getByRole('region', { name: 'Demo-Arbeitsbereich' }).getByRole('button', { name: 'Administration' }).click();
+    await expect(other.locator('.user-name')).toContainText('Samira Kaya');
+
+    // Even the admin of workspace B sees only the twelve own sample tickets.
+    const tickets = await (await other.request.get('/api/tickets')).json();
+    expect(tickets).toHaveLength(12);
+    expect(tickets.map((ticket: { title: string }) => ticket.title)).not.toContain(title);
+  } finally {
+    await otherVisitor.close();
+  }
+});

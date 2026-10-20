@@ -33,3 +33,12 @@ def test_active_ticket_cannot_lose_its_assignee():
 def test_closed_ticket_cannot_be_reassigned():
     with pytest.raises(InvalidTransitionError):
         validate_assignment(Ticket(status=TicketStatus.CLOSED, assignee_id=2), user(3, UserRole.AGENT), user(1, UserRole.ADMIN))
+
+
+
+def test_assignee_must_belong_to_the_ticket_workspace():
+    """Zweite Schutzlinie der Mandantentrennung - unabhaengig davon, dass der
+    Router Personen fremder Arbeitsbereiche schon beim Nachschlagen abweist."""
+    foreign_agent = User(id=2, role=UserRole.AGENT, workspace_id=8)
+    with pytest.raises(ValidationError):
+        validate_assignment(Ticket(status=TicketStatus.OPEN, workspace_id=7), foreign_agent, user(1, UserRole.ADMIN))
