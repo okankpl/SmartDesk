@@ -86,10 +86,6 @@ export class Login {
     }, 1000);
   }
 
-  // Wird bei jedem Tastendruck im E-Mail-Feld aufgerufen (siehe (input)-Bindung
-  // in login.html). event.target ist laut TypeScript nur ein generisches
-  // "EventTarget" - "as HTMLInputElement" sagt dem Compiler "vertrau mir, das
-  // ist wirklich ein <input>-Element", damit .value ueberhaupt erlaubt ist.
   // Legt einen privaten Demo-Arbeitsbereich an (siehe Auth.startDemo) und
   // oeffnet danach direkt das Dashboard.
   protected startDemo(): void {
@@ -118,6 +114,10 @@ export class Login {
     });
   }
 
+  // Wird bei jedem Tastendruck im E-Mail-Feld aufgerufen (siehe (input)-Bindung
+  // in login.html). event.target ist laut TypeScript nur ein generisches
+  // "EventTarget" - "as HTMLInputElement" sagt dem Compiler "vertrau mir, das
+  // ist wirklich ein <input>-Element", damit .value ueberhaupt erlaubt ist.
   protected onEmailInput(event: Event): void {
     this.email.set((event.target as HTMLInputElement).value);
   }
