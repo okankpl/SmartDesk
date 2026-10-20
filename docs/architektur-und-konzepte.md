@@ -577,7 +577,7 @@ Ehrlich zu benennen, was fehlt, ist selbst ein Qualitätsmerkmal. Hier die aktue
 13. Login-Rate-Limiting ist umgesetzt; als Nächstes E-Mail-Verifikation/Passwort-Reset, Registrierungsschutz und Token-Widerruf
 14. ~~Ticket-Inhalte über die Oberfläche bearbeiten~~ – erledigt: Editor mit Validierung, Versionsschutz, Entwurfsbestätigung und Tests
 15. Serverseitige Suche und Pagination
-16. Öffentliches HTTPS-Deployment mit eigener Konfiguration, Betrieb und Überwachung
-17. ~~Öffentliche Demo ohne gemeinsame Konten~~ – erledigt: privater Arbeitsbereich pro Besucher mit Rollenwechsel, Begrenzung, Ablauf und Mandantentrennung in allen Sichtbarkeitsregeln; das Veröffentlichen selbst ist Punkt 16
+16. ~~Öffentliches HTTPS-Deployment~~ – erledigt: öffentliche Demo per Caddy und Let's Encrypt auf einem eigenen VPS (siehe [Deployment](deployment.md)); offen bleiben zeitgesteuerte Backups außerhalb des Servers und Überwachung mit Benachrichtigung
+17. ~~Öffentliche Demo ohne gemeinsame Konten~~ – erledigt: privater Arbeitsbereich pro Besucher mit Rollenwechsel, Begrenzung, Ablauf und Mandantentrennung in allen Sichtbarkeitsregeln; veröffentlicht über Punkt 16
 
 Ausführlicher Phasenplan: siehe die Commit-Historie (`git log`) – jeder Phasen-Commit beschreibt, was dazukam und warum.

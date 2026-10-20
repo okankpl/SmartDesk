@@ -1,6 +1,6 @@
 # SmartDesk – Deployment auf einem eigenen VPS
 
-**Stand: 20.10.2026.** Dies ist eine Betriebsanleitung, kein Nachweis eines bereits erfolgten öffentlichen Deployments. Für die lokale Demo und Entwicklung zuerst die [Startanleitung im Projekt-README](../README.md) lesen; die [Dokumentationsübersicht](README.md) ordnet die weiteren Dokumente ein.
+**Stand: 20.10.2026.** Nach dieser Anleitung läuft die öffentliche Demo unter [smartdesk-okan.duckdns.org](https://smartdesk-okan.duckdns.org) (Ubuntu 24.04 auf einem Arm-VPS mit 2 vCPU und 4 GB RAM, DNS-Name über DuckDNS, `PUBLIC_DEMO=true`, `REGISTRATION_ENABLED=false`). Für die lokale Demo und Entwicklung zuerst die [Startanleitung im Projekt-README](../README.md) lesen; die [Dokumentationsübersicht](README.md) ordnet die weiteren Dokumente ein.
 
 Für die lokale Vorführung genügt die [Demo aus dem README](../README.md#demo-starten). Die bekannte Demo-Anmeldung und `docker-compose.demo.yml` gehören nicht auf einen öffentlichen Server. `DEMO_MODE` bleibt in der Produktionsumgebung `false`. Die folgenden Schritte beschreiben ein Deployment mit eigenen Zugangsdaten; noch offene Sicherheits- und Betriebsaufgaben stehen in den [bewussten Einschränkungen](architektur-und-konzepte.md#9-bewusste-einschränkungen--offene-punkte).
 

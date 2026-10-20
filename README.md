@@ -10,6 +10,8 @@ Ein Full-Stack-Projekt für internen IT-Support: Mitarbeitende melden Anliegen, 
 
 [Mobile Ansicht ansehen](docs/images/mobile.png)
 
+**Live-Demo:** [smartdesk-okan.duckdns.org](https://smartdesk-okan.duckdns.org) – auf der Anmeldeseite **Demo starten** wählen. Jede Person erhält einen eigenen Arbeitsbereich mit Beispieltickets, kann zwischen den drei Rollen wechseln und sieht keine Eingaben anderer Besucher; der Bereich wird nach 24 Stunden gelöscht.
+
 **Dokumentation:** [Architektur, technische Entscheidungen und Betrieb](docs/README.md). Für den ersten Eindruck genügt die Demo unten; die technischen Dokumente erklären die Umsetzung und ihre Grenzen.
 
 ## Demo starten
