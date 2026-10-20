@@ -45,6 +45,11 @@ export class Dashboard {
   );
 
   private readonly ticketsResource = resource({
+    // params: haengt das Laden an das angemeldete Konto. Wechselt es (Rollen-
+    // wechsel in der Demo), laedt resource() die Liste automatisch neu - ohne
+    // dass das Dashboard dafuer neu erzeugt werden muss. Als Objekt verpackt:
+    // gibt params undefined zurueck, laedt resource() gar nicht erst.
+    params: () => ({ userId: this.currentUser()?.id ?? null }),
     loader: async () => {
       const tickets = await firstValueFrom(this.ticketsService.list());
       this.lastSuccessfulTickets.set(tickets);

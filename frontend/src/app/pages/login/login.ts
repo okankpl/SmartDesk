@@ -10,6 +10,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 // hier gebraucht, um "?reason=session-expired" aus der URL zu lesen.
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Auth } from '../../core/auth/auth';
+import { DEFAULT_DEMO_CONFIG, DemoService } from '../../core/demo/demo';
 import { errorMessageFor } from '../../core/http-error-message';
 import { LucideTicketCheck, LucideEye, LucideEyeOff, LucideArrowRight } from '@lucide/angular';
 
@@ -29,6 +30,15 @@ export class Login {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly demo = inject(DemoService);
+
+  // Ob diese Umgebung "Demo starten" und "Registrieren" anbietet. Startet
+  // mit DEFAULT_DEMO_CONFIG (= Verhalten ohne oeffentliche Demo) und wird im
+  // Konstruktor einmal vom Backend aktualisiert. Ein einfaches Signal statt
+  // resource() genuegt: es ist eine einmalige Abfrage ohne Parameter.
+  protected readonly demoConfig = signal(DEFAULT_DEMO_CONFIG);
+  protected readonly isStartingDemo = signal(false);
+  protected readonly demoError = signal<string | null>(null);
   private cooldownTimer: ReturnType<typeof setInterval> | undefined;
 
   // true, wenn man wegen einer abgelaufenen Sitzung hierher umgeleitet wurde
@@ -52,6 +62,9 @@ export class Login {
   protected readonly retryAfterSeconds = signal(0);
 
   constructor() {
+    // error: () => {} - ist die Konfiguration nicht erreichbar, bleibt es beim
+    // Standard; die normale Anmeldung funktioniert trotzdem.
+    this.demo.config().subscribe({ next: (config) => this.demoConfig.set(config), error: () => {} });
     this.destroyRef.onDestroy(() => clearInterval(this.cooldownTimer));
   }
 
@@ -77,6 +90,34 @@ export class Login {
   // in login.html). event.target ist laut TypeScript nur ein generisches
   // "EventTarget" - "as HTMLInputElement" sagt dem Compiler "vertrau mir, das
   // ist wirklich ein <input>-Element", damit .value ueberhaupt erlaubt ist.
+  // Legt einen privaten Demo-Arbeitsbereich an (siehe Auth.startDemo) und
+  // oeffnet danach direkt das Dashboard.
+  protected startDemo(): void {
+    if (this.isStartingDemo()) return;
+    this.isStartingDemo.set(true);
+    this.demoError.set(null);
+    this.auth.startDemo().subscribe({
+      next: () => {
+        this.isStartingDemo.set(false);
+        void this.router.navigateByUrl('/dashboard');
+      },
+      error: (error: unknown) => {
+        this.isStartingDemo.set(false);
+        this.demoError.set(
+          errorMessageFor(
+            error,
+            {
+              404: 'Die öffentliche Demo ist hier nicht aktiviert.',
+              429: 'Von deiner Adresse wurden gerade viele Demos gestartet. Bitte versuche es später erneut.',
+              503: 'Die Demo ist gerade ausgelastet. Bitte versuche es in ein paar Minuten erneut.',
+            },
+            'Die Demo konnte nicht gestartet werden. Bitte erneut versuchen.',
+          ),
+        );
+      },
+    });
+  }
+
   protected onEmailInput(event: Event): void {
     this.email.set((event.target as HTMLInputElement).value);
   }

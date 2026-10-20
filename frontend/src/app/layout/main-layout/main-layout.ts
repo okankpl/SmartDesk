@@ -16,13 +16,14 @@ import {
 } from '@angular/router';
 
 import { Auth } from '../../core/auth/auth';
+import { DemoBar } from '../demo-bar/demo-bar';
 import { errorMessageFor } from '../../core/http-error-message';
 
 @Component({
   selector: 'app-main-layout',
 
   // Diese Direktiven werden im HTML-Template verwendet
-  imports: [RouterLink, RouterLinkActive, RouterOutlet, LucideTicketCheck, LucideLayoutDashboard, LucideCirclePlus, LucideHeadset, LucideLogOut],
+  imports: [RouterLink, RouterLinkActive, RouterOutlet, DemoBar, LucideTicketCheck, LucideLayoutDashboard, LucideCirclePlus, LucideHeadset, LucideLogOut],
 
   templateUrl: './main-layout.html',
   styleUrl: './main-layout.scss'

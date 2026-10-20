@@ -1,6 +1,17 @@
 <div class="login-page">
   <div class="auth-shell">
     <a class="brand" routerLink="/login"><span class="brand-mark"><svg lucideTicketCheck [size]="22"></svg></span>SmartDesk</a>
+    <!-- Nur in der oeffentlichen Demo (PUBLIC_DEMO=true im Backend): ein
+         eigener Arbeitsbereich ohne Konto. Eigenes <section> statt eines
+         Buttons im Formular - ein Klick darf nicht den Login ausloesen. -->
+    @if (demoConfig().public_demo) {
+      <section class="login-card demo-card" aria-labelledby="demo-title">
+        <h2 id="demo-title">Ohne Konto ausprobieren</h2>
+        <p>Du bekommst einen eigenen Arbeitsbereich mit Beispieltickets und kannst zwischen Mitarbeitenden, Support und Admin wechseln. Was du dort änderst oder schreibst, sieht niemand sonst. Nach {{ demoConfig().workspace_ttl_hours }} Stunden wird alles gelöscht.</p>
+        @if (demoError()) { <p class="error" role="alert">{{ demoError() }}</p> }
+        <button type="button" class="button button--primary auth-submit" (click)="startDemo()" [disabled]="isStartingDemo()">{{ isStartingDemo() ? 'Wird vorbereitet…' : 'Demo starten' }}<svg lucideArrowRight [size]="17"></svg></button>
+      </section>
+    }
     <form class="login-card" (submit)="submit($event)">
       <h1>Anmelden</h1>
       @if (accountCreated) { <p class="info" role="status">Dein Konto wurde erstellt. Du kannst dich jetzt anmelden.</p> }
@@ -12,7 +23,10 @@
       </div></div>
       @if (errorMessage()) { <p class="error" role="alert">{{ errorMessage() }}</p> }
       <button type="submit" class="button button--primary auth-submit" [disabled]="isSubmitting() || retryAfterSeconds() > 0">{{ isSubmitting() ? 'Wird geprüft…' : retryAfterSeconds() > 0 ? 'Erneut in ' + retryAfterSeconds() + ' s' : 'Anmelden' }}<svg lucideArrowRight [size]="17"></svg></button>
-      <p class="auth-link">Noch kein Konto? <a routerLink="/register">Registrieren</a></p>
+      <!-- Auf dem oeffentlichen Demo-Server ist die Registrierung aus. -->
+      @if (demoConfig().registration_enabled) {
+        <p class="auth-link">Noch kein Konto? <a routerLink="/register">Registrieren</a></p>
+      }
     </form>
   </div>
 </div>

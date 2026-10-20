@@ -340,3 +340,22 @@ test('a conflicting edit preserves the draft and reloads before retrying', async
     expect((await page.request.delete(path)).status()).toBe(204);
   }
 });
+
+test('public demo starts a private workspace and switches roles without a password', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Demo starten' }).click();
+  await page.waitForURL('**/dashboard');
+
+  // The banner only appears for accounts of a demo workspace.
+  const bar = page.getByRole('region', { name: 'Demo-Arbeitsbereich' });
+  await expect(bar).toContainText('nur für dich sichtbar');
+  await expect(bar.getByRole('button', { name: 'Mitarbeitende' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.user-name')).toContainText('Lena Fischer');
+
+  await bar.getByRole('button', { name: 'Support' }).click();
+  await expect(bar.getByRole('button', { name: 'Support' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.user-name')).toContainText('Alex Weber');
+
+  await bar.getByRole('button', { name: 'Administration' }).click();
+  await expect(page.locator('.user-name')).toContainText('Samira Kaya');
+});
