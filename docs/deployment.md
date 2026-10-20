@@ -64,7 +64,11 @@ docker compose version
 
 Bei echter Domain: beim Domain-Registrar (oder DNS-Anbieter) einen **A-Record** anlegen, der auf die Server-IP zeigt.
 
-Liegt die Domain bereits bei einem Webhoster (z. B. ALL-INKL für eine Portfolio-Seite), genügt eine Subdomain wie `smartdesk.<domain>`: in den DNS-Einstellungen der Domain einen A-Record mit dem Namen `smartdesk` und der IPv4-Adresse des Servers anlegen. Die Subdomain dabei **nicht** als Webspace-Subdomain des Hosters einrichten – die zeigt auf dessen Webserver statt auf den eigenen Server, und Caddy könnte kein Zertifikat holen. Die Portfolio-Seite selbst bleibt unverändert beim Hoster und verlinkt nur auf die Subdomain. DNS-Änderungen brauchen Zeit, um sich zu verbreiten (Minuten bis Stunden) – vor dem nächsten Schritt mit `dig <domain>` oder `nslookup <domain>` prüfen, ob die IP schon korrekt zurückkommt.
+Liegt die Domain bereits bei einem Webhoster (z. B. ALL-INKL für eine Portfolio-Seite), genügt eine Subdomain wie `smartdesk.<domain>`: in den DNS-Einstellungen der Domain einen A-Record mit dem Namen `smartdesk` und der IPv4-Adresse des Servers anlegen. Die Subdomain dabei **nicht** als Webspace-Subdomain des Hosters einrichten – die zeigt auf dessen Webserver statt auf den eigenen Server, und Caddy könnte kein Zertifikat holen. Die Portfolio-Seite selbst bleibt unverändert beim Hoster und verlinkt nur auf die Subdomain.
+
+Erlaubt der Tarif des Hosters keine eigenen DNS-Einträge, genügt ein kostenloser Name eines DNS-Dienstes, z. B. `smartdesk-<name>.dedyn.io` bei [deSEC](https://desec.io) oder `smartdesk-<name>.duckdns.org` bei [DuckDNS](https://www.duckdns.org): dort einen A-Record auf die Server-IP setzen und den Namen als `DOMAIN` und in `FRONTEND_ORIGIN` eintragen. Die Nameserver der eigenen Domain umzuziehen, ist dafür nicht nötig – das würde Website und E-Mail-Einträge mitbetreffen.
+
+DNS-Änderungen brauchen Zeit, um sich zu verbreiten (Minuten bis Stunden) – vor dem nächsten Schritt mit `dig <domain>` oder `nslookup <domain>` prüfen, ob die IP schon korrekt zurückkommt.
 
 Auch vorhandene AAAA-Einträge prüfen: Eine falsche IPv6-Adresse kann Erreichbarkeit und Zertifikatsprüfung stören. Voraussetzungen und Verhalten der Zertifikatsbeschaffung stehen in [Caddys Dokumentation zu automatischem HTTPS](https://caddyserver.com/docs/automatic-https).
 
