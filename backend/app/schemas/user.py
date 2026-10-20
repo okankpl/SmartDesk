@@ -17,3 +17,12 @@ class UserRead(BaseModel):
     full_name: str
     role: UserRole
     created_at: datetime
+
+
+class CurrentUserRead(UserRead):
+    """Antwort von GET /auth/me und der Demo-Endpunkte: der eingeloggte Nutzer
+    plus demo_expires_at - wann sein Demo-Arbeitsbereich geloescht wird (None
+    bei normalen Konten). Ein eigenes Schema statt eines Feldes in UserRead,
+    weil die Nutzerliste (/users) diese Information nicht braucht."""
+
+    demo_expires_at: datetime | None = None

@@ -64,14 +64,20 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
 
 
-def create_access_token(user_id: int, role: str) -> str:
+def create_access_token(user_id: int, role: str, expires_at: datetime | None = None) -> str:
     """Erzeugt einen signierten JWT für einen eingeloggten Nutzer.
 
     Wird beim Login aufgerufen, NACHDEM verify_password() das Passwort
     bestätigt hat. "sub" und "exp" sind JWT-Standardfelder (subject/expiry),
     die jwt.decode() automatisch auswertet.
+
+    expires_at: ohne Angabe gilt der Token ACCESS_TOKEN_EXPIRE_MINUTES lang.
+    Die oeffentliche Demo uebergibt das Ende des Demo-Arbeitsbereichs, damit
+    eine Sitzung nicht mitten im Ausprobieren nach einer Stunde endet
+    (siehe routers/demo.py).
     """
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    if expires_at is None:
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
         "sub": str(user_id),  # "sub" muss laut JWT-Standard ein String sein
         "role": role,

@@ -5,13 +5,16 @@ import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/route
 
 import { Login } from './login';
 import { API_URL } from '../../core/api-url';
+import { DEFAULT_DEMO_CONFIG, DemoConfig } from '../../core/demo/demo';
 
 // Baut die Login-Seite mit einer vorgegebenen URL-Abfrage (z.B.
 // "?reason=session-expired"). Statt echter Navigation wird ActivatedRoute
 // durch ein kleines Ersatz-Objekt mit genau dem Teil ersetzt, den Login
 // liest (snapshot.queryParamMap). convertToParamMap macht aus einem
 // einfachen Objekt dieselbe ParamMap, die der Router selbst liefern wuerde.
-function createLogin(queryParams: Record<string, string> = {}): ComponentFixture<Login> {
+// demoConfig: was GET /demo/config antworten soll - ohne Angabe wie eine
+// Umgebung ohne oeffentliche Demo.
+function createLogin(queryParams: Record<string, string> = {}, demoConfig: DemoConfig = DEFAULT_DEMO_CONFIG): ComponentFixture<Login> {
   TestBed.configureTestingModule({
     imports: [Login],
     providers: [
@@ -23,6 +26,8 @@ function createLogin(queryParams: Record<string, string> = {}): ComponentFixture
   });
   const fixture = TestBed.createComponent(Login);
   fixture.detectChanges();
+  // Die Seite fragt beim Erzeugen, ob sie "Demo starten" anbieten soll.
+  TestBed.inject(HttpTestingController).expectOne(`${API_URL}/demo/config`).flush(demoConfig);
   return fixture;
 }
 
@@ -140,5 +145,40 @@ describe('Login', () => {
     expect(root.querySelector('[role=alert]')?.textContent).toContain('vorübergehend nicht verfügbar');
     expect(root.querySelector('[role=alert]')?.textContent).not.toContain('Passwort');
     expect(root.querySelector<HTMLButtonElement>('button[type=submit]')?.disabled).toBe(true);
+  });
+
+  describe('oeffentliche Demo', () => {
+    const PUBLIC: DemoConfig = { public_demo: true, registration_enabled: false, workspace_ttl_hours: 24 };
+
+    async function render(config: DemoConfig): Promise<{ fixture: ComponentFixture<Login>; root: HTMLElement }> {
+      const fixture = createLogin({}, config);
+      await fixture.whenStable();
+      fixture.detectChanges();
+      return { fixture, root: fixture.nativeElement as HTMLElement };
+    }
+
+    it('zeigt ohne oeffentliche Demo keine Demo-Karte, aber den Registrieren-Link', async () => {
+      const { root } = await render(DEFAULT_DEMO_CONFIG);
+      expect(root.querySelector('.demo-card')).toBeNull();
+      expect(root.querySelector('a[href="/register"]')).not.toBeNull();
+    });
+
+    it('bietet "Demo starten" an und blendet die deaktivierte Registrierung aus', async () => {
+      const { root } = await render(PUBLIC);
+      expect(root.querySelector('.demo-card')?.textContent).toContain('sieht niemand sonst');
+      expect(root.querySelector('.demo-card')?.textContent).toContain('24 Stunden');
+      expect(root.querySelector('a[href="/register"]')).toBeNull();
+    });
+
+    it('startet einen Arbeitsbereich und erklaert ein ausgeschoepftes Budget', async () => {
+      const { fixture, root } = await render(PUBLIC);
+      const startButton = [...root.querySelectorAll<HTMLButtonElement>('.demo-card button')].find((b) => b.textContent?.includes('Demo starten'))!;
+      startButton.click();
+      const request = TestBed.inject(HttpTestingController).expectOne(`${API_URL}/demo/sessions`);
+      expect(request.request.method).toBe('POST');
+      request.flush({ detail: 'zu viele' }, { status: 429, statusText: 'Too Many Requests', headers: { 'Retry-After': '600' } });
+      fixture.detectChanges();
+      expect(root.querySelector('.demo-card [role=alert]')?.textContent).toContain('viele Demos gestartet');
+    });
   });
 });

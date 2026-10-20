@@ -9,6 +9,12 @@ def validate_assignment(ticket: Ticket, assignee: User | None, current_user: Use
     (oder von anderen weg) zuweisen duerfen nur Admins."""
     if ticket.status == TicketStatus.CLOSED:
         raise InvalidTransitionError("Geschlossene Tickets können nicht mehr geändert werden")
+    # Zweite Schutzlinie der Mandantentrennung: Bearbeiter und Ticket gehoeren
+    # zum selben Arbeitsbereich. Der Router weist fremde Personen schon vorher
+    # mit 404 ab (get_visible_user) - die Regel gilt hier aber unabhaengig
+    # davon, wer validate_assignment aufruft.
+    if assignee is not None and assignee.workspace_id != ticket.workspace_id:
+        raise ValidationError("Bearbeiter und Ticket müssen zum selben Arbeitsbereich gehören")
     if assignee is not None and assignee.role not in {UserRole.AGENT, UserRole.ADMIN}:
         raise ValidationError("Nur Support-Mitarbeitende oder Admins dürfen Tickets bearbeiten")
     if assignee is None and ticket.status != TicketStatus.OPEN:

@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import jwt
 from fastapi import Cookie, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -66,6 +68,12 @@ def get_current_user(
         raise unauthorized
     user = db.get(User, parsed_user_id)
     if user is None:
+        raise unauthorized
+
+    # Konten eines abgelaufenen Demo-Arbeitsbereichs sind sofort unbrauchbar,
+    # auch wenn der Bereich noch nicht geloescht wurde (das passiert erst beim
+    # naechsten "Demo starten", siehe services/demo_workspaces.py).
+    if user.workspace is not None and user.workspace.expires_at <= datetime.now(timezone.utc):
         raise unauthorized
 
     return user

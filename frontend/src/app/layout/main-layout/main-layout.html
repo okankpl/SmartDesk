@@ -30,6 +30,8 @@
         </div>
       }
     </header>
+    <!-- Nur bei Konten eines Demo-Arbeitsbereichs sichtbar (siehe demo-bar.ts). -->
+    <app-demo-bar />
     <main class="content" id="main-content" tabindex="-1">
       @if (logoutError()) { <p class="notice notice--error" role="alert">{{ logoutError() }}</p> }
       <router-outlet />

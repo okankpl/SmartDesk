@@ -1,6 +1,6 @@
 # SmartDesk – Deployment auf einem eigenen VPS
 
-**Stand: 19.10.2026.** Dies ist eine Betriebsanleitung, kein Nachweis eines bereits erfolgten öffentlichen Deployments. Für die lokale Demo und Entwicklung zuerst die [Startanleitung im Projekt-README](../README.md) lesen; die [Dokumentationsübersicht](README.md) ordnet die weiteren Dokumente ein.
+**Stand: 20.10.2026.** Dies ist eine Betriebsanleitung, kein Nachweis eines bereits erfolgten öffentlichen Deployments. Für die lokale Demo und Entwicklung zuerst die [Startanleitung im Projekt-README](../README.md) lesen; die [Dokumentationsübersicht](README.md) ordnet die weiteren Dokumente ein.
 
 Für die lokale Vorführung genügt die [Demo aus dem README](../README.md#demo-starten). Die bekannte Demo-Anmeldung und `docker-compose.demo.yml` gehören nicht auf einen öffentlichen Server. `DEMO_MODE` bleibt in der Produktionsumgebung `false`. Die folgenden Schritte beschreiben ein Deployment mit eigenen Zugangsdaten; noch offene Sicherheits- und Betriebsaufgaben stehen in den [bewussten Einschränkungen](architektur-und-konzepte.md#9-bewusste-einschränkungen--offene-punkte).
 
@@ -62,7 +62,13 @@ docker compose version
 
 ## Schritt 4: Domain auf den Server zeigen lassen
 
-Bei echter Domain: beim Domain-Registrar (oder DNS-Anbieter) einen **A-Record** anlegen, der auf die Server-IP zeigt. DNS-Änderungen brauchen Zeit, um sich zu verbreiten (Minuten bis Stunden) – vor dem nächsten Schritt mit `dig <domain>` oder `nslookup <domain>` prüfen, ob die IP schon korrekt zurückkommt.
+Bei echter Domain: beim Domain-Registrar (oder DNS-Anbieter) einen **A-Record** anlegen, der auf die Server-IP zeigt.
+
+Liegt die Domain bereits bei einem Webhoster (z. B. ALL-INKL für eine Portfolio-Seite), genügt eine Subdomain wie `smartdesk.<domain>`: in den DNS-Einstellungen der Domain einen A-Record mit dem Namen `smartdesk` und der IPv4-Adresse des Servers anlegen. Die Subdomain dabei **nicht** als Webspace-Subdomain des Hosters einrichten – die zeigt auf dessen Webserver statt auf den eigenen Server, und Caddy könnte kein Zertifikat holen. Die Portfolio-Seite selbst bleibt unverändert beim Hoster und verlinkt nur auf die Subdomain.
+
+Erlaubt der Tarif des Hosters keine eigenen DNS-Einträge, genügt ein kostenloser Name eines DNS-Dienstes, z. B. `smartdesk-<name>.dedyn.io` bei [deSEC](https://desec.io) oder `smartdesk-<name>.duckdns.org` bei [DuckDNS](https://www.duckdns.org): dort einen A-Record auf die Server-IP setzen und den Namen als `DOMAIN` und in `FRONTEND_ORIGIN` eintragen. Die Nameserver der eigenen Domain umzuziehen, ist dafür nicht nötig – das würde Website und E-Mail-Einträge mitbetreffen.
+
+DNS-Änderungen brauchen Zeit, um sich zu verbreiten (Minuten bis Stunden) – vor dem nächsten Schritt mit `dig <domain>` oder `nslookup <domain>` prüfen, ob die IP schon korrekt zurückkommt.
 
 Auch vorhandene AAAA-Einträge prüfen: Eine falsche IPv6-Adresse kann Erreichbarkeit und Zertifikatsprüfung stören. Voraussetzungen und Verhalten der Zertifikatsbeschaffung stehen in [Caddys Dokumentation zu automatischem HTTPS](https://caddyserver.com/docs/automatic-https).
 
@@ -105,6 +111,23 @@ LOGIN_RATE_LIMIT_ACCOUNT_WINDOW_SECONDS=300
 ```
 
 `token_hex` erzeugt nur Ziffern und die Buchstaben a–f. Das ist bei `POSTGRES_PASSWORD` wichtig: Zeichen wie `@`, `/` oder `:` hätten in `DATABASE_URL` eine eigene Bedeutung und müssten dort zusätzlich URL-kodiert werden.
+
+Für eine **öffentliche Demo**, die Besucher ohne Konto ausprobieren können, zusätzlich:
+
+```bash
+# "Demo starten" legt pro Person einen privaten Arbeitsbereich an (siehe Architektur,
+# Abschnitt "Öffentliche Demo"); bekannte gemeinsame Demo-Konten gibt es hier nicht.
+PUBLIC_DEMO=true
+DEMO_MODE=false
+# Keine dauerhaften fremden Konten auf dem Demo-Server.
+REGISTRATION_ENABLED=false
+DEMO_WORKSPACE_TTL_HOURS=24
+DEMO_MAX_ACTIVE_WORKSPACES=200
+DEMO_SESSION_IP_ATTEMPTS=10
+DEMO_SESSION_IP_WINDOW_SECONDS=3600
+```
+
+Abgelaufene Arbeitsbereiche werden beim nächsten Start einer Demo gelöscht; ein eigener Aufräumjob ist nicht nötig. Bis dahin sind ihre Konten bereits gesperrt.
 
 Zusätzlich (für Caddy, siehe `docker-compose.prod.yml`):
 ```bash
@@ -195,6 +218,7 @@ Unter Windows/PowerShell statt `DOMAIN=localhost ...` vorher `$env:DOMAIN = "loc
 | Zertifikat wird nicht ausgestellt / Caddy-Logs zeigen Timeout | DNS zeigt noch nicht (richtig) auf die Server-IP, oder Port 80/443 ist irgendwo blockiert (Cloud-Firewall vs. `ufw` – beide prüfen) |
 | `502 Bad Gateway` von Caddy | Backend-Container läuft nicht/ist noch am Starten - `docker compose -f docker-compose.prod.yml ps` und `logs backend` prüfen |
 | `/api/health` sagt `ok`, aber `/api/health/ready` gibt `503` | Antwortdetail prüfen: PostgreSQL oder Redis ist nicht erreichbar. Datenbank-Zugangsdaten beziehungsweise `LOGIN_RATE_LIMIT_STORAGE_URI` und Redis-Logs prüfen. Eine geänderte `.env` ändert kein Passwort in einem bestehenden PostgreSQL-Volume. |
+| „Demo starten“ liefert `429` oder `503` | `429`: zu viele neue Demos von dieser IP (`DEMO_SESSION_IP_*`); `503`: Obergrenze aktiver Bereiche erreicht (`DEMO_MAX_ACTIVE_WORKSPACES`) oder Redis nicht erreichbar – Antwortdetail und Backend-Logs prüfen |
 | Login liefert `429` | `Retry-After` beachten; Grenzwerte, gemeinsam verwendete Konten und Firmen-NAT prüfen. Keine Redis-Volumes als reguläre Entsperrung löschen. |
 | Login liefert `503`, Redis-Ping funktioniert | Redis-Schreibfehler, Speicherlimit und Logs prüfen. Es gibt absichtlich keinen unbegrenzten In-Memory-Fallback. |
 | Backend startet nicht, Log zeigt `SECRET_KEY ist der Platzhalter ...` | `SECRET_KEY` in `.env` ist noch der Beispielwert oder zu kurz – neuen Wert erzeugen (siehe Schritt 6), danach `docker compose -f docker-compose.prod.yml up -d backend` |

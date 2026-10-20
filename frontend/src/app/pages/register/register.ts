@@ -43,6 +43,8 @@ export class Register {
       error: (error: unknown) => {
         this.isSubmitting.set(false);
         this.errorMessage.set(errorMessageFor(error, {
+          // 403: auf dem oeffentlichen Demo-Server ist die Registrierung aus.
+          403: 'Die Registrierung ist hier deaktiviert. Starte stattdessen die Demo auf der Anmeldeseite.',
           409: 'Diese E-Mail ist bereits registriert. Bitte melde dich an.',
           422: 'Bitte prüfe Name, E-Mail und Passwort.',
         }, 'Registrierung gerade nicht möglich. Bitte erneut versuchen.'));

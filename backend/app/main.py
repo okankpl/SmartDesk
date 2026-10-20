@@ -19,7 +19,7 @@ from app.core.login_rate_limit import LoginRateLimiter, get_login_rate_limiter
 # "app.routers" ist unser eigener Ordner backend/app/routers/. "tickets" ist die Datei
 # tickets.py darin. Wir importieren das ganze Modul (nicht nur eine Funktion daraus),
 # damit wir unten "tickets.router" schreiben können.
-from app.routers import auth, comments, ticket_events, tickets, users
+from app.routers import auth, comments, demo, ticket_events, tickets, users
 
 # FastAPI(...) ruft den Konstruktor der Klasse auf und erzeugt ein Objekt - "app" IST
 # jetzt unsere Anwendung. title="..." ist ein Keyword-Argument (Parameter wird über
@@ -64,6 +64,9 @@ app.include_router(tickets.router)
 app.include_router(comments.router)
 app.include_router(ticket_events.router)
 app.include_router(users.router)
+# Oeffentliche Demo (private Arbeitsbereiche); ohne PUBLIC_DEMO=true antworten
+# die Endpunkte mit 404, nur /demo/config ist immer lesbar.
+app.include_router(demo.router)
 
 
 # @app.get("/health") ist ein Decorator (die Zeile mit @ direkt über einer Funktion).

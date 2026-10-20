@@ -29,6 +29,9 @@ export interface CurrentUser {
   email: string;
   full_name: string;
   role: 'employee' | 'agent' | 'admin';
+  // Nur bei Konten eines Demo-Arbeitsbereichs gesetzt: wann der Bereich
+  // geloescht wird (ISO-Zeitpunkt). Fehlt bei normalen Konten bzw. ist null.
+  demo_expires_at?: string | null;
 }
 
 // providedIn: 'root' heisst: Angular erzeugt GENAU EINE Instanz dieser Klasse
@@ -64,6 +67,23 @@ export class Auth {
 
   register(payload: { full_name: string; email: string; password: string }): Observable<CurrentUser> {
     return this.http.post<CurrentUser>(`${API_URL}/auth/register`, payload);
+  }
+
+  /**
+   * Oeffentliche Demo: legt einen eigenen, privaten Arbeitsbereich an. Das
+   * Backend setzt dabei den Sitzungs-Cookie und antwortet direkt mit dem
+   * angemeldeten Konto (Mitarbeitende) - ein /auth/me-Aufruf danach ist
+   * deshalb nicht noetig.
+   */
+  startDemo(): Observable<CurrentUser> {
+    return this.http.post<CurrentUser>(`${API_URL}/demo/sessions`, {}).pipe(tap((user) => this._currentUser.set(user)));
+  }
+
+  /** Wechselt im eigenen Demo-Arbeitsbereich zum Konto mit dieser Rolle. */
+  switchDemoRole(role: CurrentUser['role']): Observable<CurrentUser> {
+    return this.http
+      .post<CurrentUser>(`${API_URL}/demo/sessions/role`, { role })
+      .pipe(tap((user) => this._currentUser.set(user)));
   }
 
   /**
