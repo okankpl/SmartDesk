@@ -8,6 +8,7 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.core.login_rate_limit import LoginRateLimiter, get_login_rate_limiter
+from app.core.session_cookie import set_session_cookie
 from app.core.security import (
     ACCESS_TOKEN_COOKIE_NAME,
     ACCESS_TOKEN_EXPIRE_MINUTES,
@@ -18,7 +19,7 @@ from app.core.security import (
 )
 from app.models.user import User, UserRole
 from app.schemas.auth import RegisterRequest, TokenResponse
-from app.schemas.user import UserRead
+from app.schemas.user import CurrentUserRead, UserRead
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -32,6 +33,14 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> User:
     Abschnitt 9): ihn zu vermeiden, braeuchte eine Bestaetigungs-E-Mail statt
     einer direkten Antwort.
     """
+    # Auf dem oeffentlichen Demo-Server ausgeschaltet (REGISTRATION_ENABLED=false):
+    # Besucher nutzen dort ihren privaten Demo-Arbeitsbereich, dauerhafte
+    # fremde Konten sollen gar nicht erst entstehen.
+    if not get_settings().registration_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Die Registrierung ist in dieser Umgebung deaktiviert.",
+        )
     # payload.email ist schon kleingeschrieben (siehe RegisterRequest). func.lower
     # auf der DB-Seite erfasst zusaetzlich aeltere Eintraege, die noch mit
     # Grossbuchstaben gespeichert wurden - sonst liessen sich "Max@firma.de" und
@@ -110,21 +119,8 @@ def login(
         raise invalid_credentials
 
     token = create_access_token(user_id=user.id, role=user.role)
-    response.headers["Cache-Control"] = "no-store"
-
-    response.set_cookie(
-        key=ACCESS_TOKEN_COOKIE_NAME,
-        value=token,
-        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        httponly=True,  # per JavaScript nicht lesbar - schuetzt vor Token-Diebstahl per XSS
-        samesite="lax",  # wird nicht bei Cross-Site-Requests von anderen Domains mitgeschickt (CSRF-Schutz)
-        # secure=True wuerde den Cookie nur ueber HTTPS uebertragen. Aus
-        # get_settings().cookie_secure statt hartcodiert: lokal (http://)
-        # per Default False, in Produktion per Umgebungsvariable auf True
-        # umstellbar (siehe docs/deployment.md).
-        secure=get_settings().cookie_secure,
-        path="/",
-    )
+    # Cookie-Flags (HttpOnly, SameSite, Secure) stehen zentral in core/session_cookie.py.
+    set_session_cookie(response, token, max_age_seconds=ACCESS_TOKEN_EXPIRE_MINUTES * 60)
     return TokenResponse(access_token=token)
 
 
@@ -138,10 +134,12 @@ def logout(response: Response) -> None:
     response.delete_cookie(ACCESS_TOKEN_COOKIE_NAME, path="/")
 
 
-@router.get("/me", response_model=UserRead)
+@router.get("/me", response_model=CurrentUserRead)
 def read_current_user(current_user: User = Depends(get_current_user)) -> User:
     """Liefert den eingeloggten Nutzer. Wird vom Frontend beim Start der App
     aufgerufen, um nach einem Seiten-Reload zu pruefen, ob der HttpOnly-Cookie
     noch gueltig ist - das Frontend kann den Cookie ja nicht selbst auslesen.
+    CurrentUserRead enthaelt zusaetzlich demo_expires_at (nur bei Konten eines
+    Demo-Arbeitsbereichs gesetzt), fuer die Hinweisleiste im Frontend.
     """
     return current_user

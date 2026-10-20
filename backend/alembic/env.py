@@ -10,6 +10,7 @@ from app.core.database import Base
 # Tabelle fuer ueberfluessig und schlaegt einen DROP TABLE vor - bei jedem
 # neuen Model also hier ergaenzen.
 from app.models.comment import Comment  # noqa: F401
+from app.models.demo_workspace import DemoWorkspace  # noqa: F401
 from app.models.ticket import Ticket  # noqa: F401
 from app.models.ticket_event import TicketEvent  # noqa: F401
 from app.models.user import User  # noqa: F401

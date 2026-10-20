@@ -16,6 +16,14 @@ from limits.strategies import MovingWindowRateLimiter
 from app.core.config import Settings, get_settings
 
 
+def hashed_identifier(secret: bytes, scope: str, value: str) -> str:
+    """Redis-Schluessel fuer einen Zaehler, ohne den Wert (E-Mail, IP) im
+    Klartext zu speichern - genutzt von der Login-Drosselung und von der
+    Begrenzung neuer Demo-Arbeitsbereiche (core/demo_rate_limit.py)."""
+    payload = f"smartdesk-login-v1\0{scope}\0{value}".encode("utf-8")
+    return hmac.new(secret, payload, hashlib.sha256).hexdigest()
+
+
 class LoginRateLimiter:
     def __init__(self, settings: Settings, storage: Storage):
         self.storage = storage
@@ -30,8 +38,7 @@ class LoginRateLimiter:
         # Keine E-Mail-Adressen oder IPs im Klartext in Redis-Schluesseln (und damit
         # auch nicht in der AOF-Protokolldatei von Redis): HMAC mit dem SECRET_KEY
         # ergibt pro Wert einen festen, aber nicht zurueckrechenbaren Schluessel.
-        payload = f"smartdesk-login-v1\0{scope}\0{value}".encode("utf-8")
-        return hmac.new(self.secret, payload, hashlib.sha256).hexdigest()
+        return hashed_identifier(self.secret, scope, value)
 
     def enforce(self, email: str, client_ip: str) -> None:
         values = {"ip": client_ip, "account": email.strip().lower()}

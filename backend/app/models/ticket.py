@@ -66,6 +66,13 @@ class Ticket(Base):
     # assignee_id ist nullable: ein neues Ticket hat noch niemanden, der es bearbeitet
     # ("open" = niemand hat es geclaimt).
     assignee_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    # Demo-Arbeitsbereich, zu dem das Ticket gehoert (NULL = normales Ticket).
+    # Steht bewusst direkt am Ticket statt nur ueber den Melder ableitbar zu
+    # sein: so kann die Sichtbarkeitsregel (services/ticket_access.py) die
+    # Tickets eines Arbeitsbereichs ohne zusaetzlichen JOIN filtern.
+    workspace_id: Mapped[int | None] = mapped_column(
+        ForeignKey("demo_workspaces.id", ondelete="CASCADE"), nullable=True, index=True
+    )
 
     # lazy="joined": die Namen kommen per JOIN gleich mit der Ticketabfrage, statt
     # einer zusaetzlichen Abfrage pro Ticket beim Anzeigen der Liste (N+1-Problem).

@@ -77,7 +77,9 @@ def create_ticket(
     # (siehe TicketCreate-Docstring) - ein separater Existenz-Check entfaellt damit,
     # current_user existiert per Definition (sonst haette get_current_user schon
     # mit 401 abgebrochen).
-    ticket = Ticket(**payload.model_dump(), requester_id=current_user.id)
+    # workspace_id: ein Ticket aus einem Demo-Arbeitsbereich bleibt in diesem
+    # Bereich (bei normalen Konten None) - ebenfalls serverseitig gesetzt.
+    ticket = Ticket(**payload.model_dump(), requester_id=current_user.id, workspace_id=current_user.workspace_id)
     db.add(ticket)
     db.flush()
     record_event(db, ticket, current_user, "created", {"status": {"old": None, "new": "open"}})

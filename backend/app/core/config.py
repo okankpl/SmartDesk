@@ -65,6 +65,24 @@ class Settings(BaseSettings):
     login_rate_limit_account_attempts: int = Field(default=10, ge=1, le=10000)
     login_rate_limit_account_window_seconds: int = Field(default=300, ge=1, le=86400)
 
+    # Oeffentliche Demo (z.B. smartdesk.<domain>): jede Person bekommt per
+    # "Demo starten" einen eigenen, privaten Arbeitsbereich (siehe
+    # services/demo_workspaces.py). Unabhaengig von demo_mode oben - das
+    # befuellt nur die LOKALE Demo mit drei bekannten, gemeinsamen Konten.
+    public_demo: bool = False
+    # Wie lange ein Arbeitsbereich besteht, bevor er geloescht wird.
+    demo_workspace_ttl_hours: int = Field(default=24, ge=1, le=168)
+    # Obergrenze gleichzeitig aktiver Arbeitsbereiche: schuetzt die Datenbank,
+    # falls jemand massenhaft neue Bereiche anlegt.
+    demo_max_active_workspaces: int = Field(default=200, ge=1, le=10000)
+    # Wie viele Arbeitsbereiche eine IP-Adresse pro Zeitfenster anlegen darf
+    # (gleicher Redis-Speicher wie die Login-Drosselung).
+    demo_session_ip_attempts: int = Field(default=10, ge=1, le=1000)
+    demo_session_ip_window_seconds: int = Field(default=3600, ge=60, le=86400)
+    # Selbst-Registrierung (POST /auth/register). Auf einem oeffentlichen
+    # Demo-Server aus, damit dort keine dauerhaften fremden Konten entstehen.
+    registration_enabled: bool = True
+
     @field_validator("login_rate_limit_storage_uri")
     @classmethod
     def rate_limit_storage_must_be_shared(cls, value: str) -> str:
